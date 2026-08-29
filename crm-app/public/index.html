@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mini CRM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">◆</span>
+      <span class="brand-name">Mini CRM</span>
+    </div>
+    <div class="nav-items">
+      <button class="nav-item active" data-view="deals">
+        <span class="nav-icon">◧</span> Deals
+      </button>
+      <button class="nav-item" data-view="contacts">
+        <span class="nav-icon">☰</span> Contacts
+      </button>
+      <button class="nav-item" data-view="activities">
+        <span class="nav-icon">◔</span> Activities
+      </button>
+    </div>
+    <div class="sidebar-footer">Twój pipeline sprzedażowy</div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="content">
+
+    <!-- DEALS VIEW -->
+    <section id="view-deals" class="view active">
+      <header class="view-header">
+        <div>
+          <h1>Deals</h1>
+          <p class="subtitle">Przeciągnij kartę, aby zmienić etap klienta</p>
+        </div>
+        <button class="btn btn-primary" id="btn-new-lead">+ Nowy Lead</button>
+      </header>
+      <div class="board" id="board"><!-- columns injected by JS --></div>
+    </section>
+
+    <!-- CONTACTS VIEW -->
+    <section id="view-contacts" class="view">
+      <header class="view-header">
+        <div>
+          <h1>Contacts</h1>
+          <p class="subtitle">Wszyscy klienci w jednym miejscu</p>
+        </div>
+        <button class="btn btn-primary" id="btn-new-lead-contacts">+ Nowy kontakt</button>
+      </header>
+      <div class="table-wrap">
+        <table class="contacts-table">
+          <thead>
+            <tr>
+              <th>Imię</th>
+              <th>Nazwisko</th>
+              <th>Mail</th>
+              <th>Telefon</th>
+              <th>Preferencje</th>
+              <th>Etap</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="contacts-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ACTIVITIES VIEW -->
+    <section id="view-activities" class="view">
+      <header class="view-header">
+        <div>
+          <h1>Activities</h1>
+          <p class="subtitle">Wszystkie zaplanowane akcje z klientami</p>
+        </div>
+      </header>
+      <div class="activities-list" id="activities-list"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Modal: New Lead -->
+<div class="modal-overlay" id="modal-lead">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="lead-modal-title">Nowy Lead</h2>
+      <button class="modal-close" data-close="modal-lead">✕</button>
+    </div>
+    <form id="form-lead">
+      <input type="hidden" id="lead-id" />
+      <div class="field">
+        <label for="lead-imie">Imię *</label>
+        <input type="text" id="lead-imie" required />
+      </div>
+      <div class="field">
+        <label for="lead-nazwisko">Nazwisko *</label>
+        <input type="text" id="lead-nazwisko" required />
+      </div>
+      <div class="field">
+        <label for="lead-mail">Mail</label>
+        <input type="email" id="lead-mail" />
+      </div>
+      <div class="field">
+        <label for="lead-telefon">Telefon</label>
+        <input type="tel" id="lead-telefon" />
+      </div>
+      <div class="field">
+        <label for="lead-preferencje">Preferencje</label>
+        <textarea id="lead-preferencje" rows="3" placeholder="np. preferowany kontakt, zainteresowania, budżet..."></textarea>
+      </div>
+      <div class="field" id="lead-stage-field">
+        <label for="lead-stage">Etap</label>
+        <select id="lead-stage"></select>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close="modal-lead">Anuluj</button>
+        <button type="submit" class="btn btn-primary">Zapisz</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: New Action -->
+<div class="modal-overlay" id="modal-action">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Dodaj akcję</h2>
+      <button class="modal-close" data-close="modal-action">✕</button>
+    </div>
+    <form id="form-action">
+      <input type="hidden" id="action-client-id" />
+      <div class="field">
+        <label>Klient</label>
+        <div class="static-value" id="action-client-name"></div>
+      </div>
+      <div class="field">
+        <label for="action-name">Nazwa akcji *</label>
+        <input type="text" id="action-name" placeholder="np. Zadzwonić, Wysłać ofertę..." required />
+      </div>
+      <div class="field">
+        <label for="action-date">Data *</label>
+        <input type="date" id="action-date" required />
+      </div>
+      <div class="field">
+        <label for="action-notes">Notatki</label>
+        <textarea id="action-notes" rows="3" placeholder="Dodatkowe informacje..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close="modal-action">Anuluj</button>
+        <button type="submit" class="btn btn-primary">Zapisz akcję</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
