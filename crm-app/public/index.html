@@ -427,7 +427,10 @@
   <div class="modal modal-wide">
     <div class="modal-header">
       <h2>Dane klienta</h2>
-      <button class="modal-close" data-close="modal-client-view">✕</button>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <button class="modal-icon-btn modal-icon-danger" id="client-view-delete-btn" title="Usuń zamkniętą transakcję" style="display:none;">🗑</button>
+        <button class="modal-close" data-close="modal-client-view">✕</button>
+      </div>
     </div>
     <div id="client-view-body"></div>
     <div class="modal-actions">
