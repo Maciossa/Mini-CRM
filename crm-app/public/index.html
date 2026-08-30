@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mini CRM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- AUTH SCREEN: profile picker / login / register -->
+<div class="auth-screen" id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span class="brand-mark">◆</span> Mini CRM
+    </div>
+
+    <!-- Picker state -->
+    <div id="auth-picker">
+      <p class="auth-subtitle">Wybierz swój profil albo stwórz nowy, aby korzystać z własnego, osobistego CRM.</p>
+      <div class="profile-grid" id="profile-grid"></div>
+      <button class="btn btn-primary auth-full-btn" id="btn-show-register">+ Stwórz nowy profil</button>
+    </div>
+
+    <!-- Login state -->
+    <div id="auth-login" style="display:none;">
+      <button class="auth-back" id="btn-back-from-login">← Wróć</button>
+      <div class="auth-selected-profile">
+        <div class="client-view-avatar" id="login-avatar"></div>
+        <div class="auth-selected-name" id="login-pseudonim"></div>
+      </div>
+      <form id="form-login">
+        <input type="hidden" id="login-profile-id" />
+        <div class="field">
+          <label for="login-password">Hasło</label>
+          <input type="password" id="login-password" required autofocus />
+        </div>
+        <p class="auth-error" id="login-error"></p>
+        <button type="submit" class="btn btn-primary auth-full-btn">Zaloguj się</button>
+      </form>
+    </div>
+
+    <!-- Register state -->
+    <div id="auth-register" style="display:none;">
+      <button class="auth-back" id="btn-back-from-register">← Wróć</button>
+      <p class="auth-subtitle">Stwórz swój profil, aby mieć własny, osobisty CRM.</p>
+      <form id="form-register">
+        <div class="field">
+          <label for="reg-name">Imię i nazwisko</label>
+          <input type="text" id="reg-name" required />
+        </div>
+        <div class="field">
+          <label for="reg-pseudonim">Pseudonim (będzie wyświetlany)</label>
+          <input type="text" id="reg-pseudonim" required />
+        </div>
+        <div class="field">
+          <label for="reg-mail">Mail</label>
+          <input type="email" id="reg-mail" required />
+        </div>
+        <div class="field">
+          <label for="reg-password">Hasło</label>
+          <input type="password" id="reg-password" minlength="6" required />
+        </div>
+        <p class="auth-error" id="register-error"></p>
+        <button type="submit" class="btn btn-primary auth-full-btn">Stwórz profil</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="app-root" style="display:none;">
+  <nav class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">◆</span>
+      <span class="brand-name">Mini CRM</span>
+    </div>
+    <div class="nav-items">
+      <button class="nav-item active" data-view="deals">
+        <span class="nav-icon">◧</span> Deals
+      </button>
+      <button class="nav-item" data-view="contacts">
+        <span class="nav-icon">☰</span> Contacts
+      </button>
+      <button class="nav-item" data-view="activities">
+        <span class="nav-icon">◔</span> Activities
+      </button>
+      <button class="nav-item" data-view="calendar">
+        <span class="nav-icon">▦</span> Calendar
+      </button>
+      <button class="nav-item" data-view="profile">
+        <span class="nav-icon">☺</span> Profile
+      </button>
+      <button class="nav-item" data-view="settings">
+        <span class="nav-icon">⚙</span> Settings
+      </button>
+    </div>
+    <div class="sidebar-footer" id="sidebar-current-user"></div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="content">
+
+    <!-- DEALS VIEW -->
+    <section id="view-deals" class="view active">
+      <header class="view-header">
+        <div>
+          <h1>Deals</h1>
+          <p class="subtitle">Przeciągnij kartę, aby zmienić etap klienta</p>
+        </div>
+        <button class="btn btn-primary" id="btn-new-lead">+ Nowy Lead</button>
+      </header>
+      <div class="board" id="board"><!-- columns injected by JS --></div>
+    </section>
+
+    <!-- CONTACTS VIEW -->
+    <section id="view-contacts" class="view">
+      <header class="view-header">
+        <div>
+          <h1>Contacts</h1>
+          <p class="subtitle">Wszyscy klienci w jednym miejscu</p>
+        </div>
+        <button class="btn btn-primary" id="btn-new-lead-contacts">+ Nowy kontakt</button>
+      </header>
+      <div class="table-wrap">
+        <table class="contacts-table">
+          <thead>
+            <tr>
+              <th>Imię</th>
+              <th>Nazwisko</th>
+              <th>Mail</th>
+              <th>Telefon</th>
+              <th>Inwestycja</th>
+              <th>Cena nieruchomości</th>
+              <th>Preferencje</th>
+              <th>Etap</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="contacts-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ACTIVITIES VIEW -->
+    <section id="view-activities" class="view">
+      <header class="view-header">
+        <div>
+          <h1>Activities</h1>
+          <p class="subtitle">Wszystkie zaplanowane akcje z klientami</p>
+        </div>
+      </header>
+      <div class="activities-list" id="activities-list"></div>
+    </section>
+
+    <!-- CALENDAR VIEW -->
+    <section id="view-calendar" class="view">
+      <header class="view-header">
+        <div>
+          <h1>Calendar</h1>
+          <p class="subtitle">Umówione spotkania i przypomnienia</p>
+        </div>
+        <button class="btn btn-primary" id="btn-new-meeting">+ Nowe spotkanie</button>
+      </header>
+      <div class="calendar-nav">
+        <button class="btn btn-ghost" id="cal-prev">←</button>
+        <div class="calendar-month-label" id="cal-month-label"></div>
+        <button class="btn btn-ghost" id="cal-next">→</button>
+        <button class="btn btn-ghost" id="cal-today">Dziś</button>
+      </div>
+      <div class="calendar-weekdays">
+        <div>Pn</div><div>Wt</div><div>Śr</div><div>Cz</div><div>Pt</div><div>Sb</div><div>Nd</div>
+      </div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+    </section>
+
+    <!-- PROFILE VIEW -->
+    <section id="view-profile" class="view">
+      <header class="view-header">
+        <div>
+          <h1>Profile</h1>
+          <p class="subtitle">Twoje dane profilu</p>
+        </div>
+      </header>
+      <div class="profile-card">
+        <div class="client-view-avatar profile-card-avatar" id="profile-avatar"></div>
+        <div class="client-view-grid" style="flex:1;">
+          <div>
+            <div class="client-view-label">Imię i nazwisko</div>
+            <div class="client-view-value" id="profile-full-name"></div>
+          </div>
+          <div>
+            <div class="client-view-label">Pseudonim</div>
+            <div class="client-view-value" id="profile-pseudonim"></div>
+          </div>
+          <div>
+            <div class="client-view-label">Mail</div>
+            <div class="client-view-value" id="profile-mail"></div>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-ghost" id="btn-logout" style="margin-top:20px;">Wyloguj się / zmień profil</button>
+    </section>
+
+    <!-- SETTINGS VIEW -->
+    <section id="view-settings" class="view">
+      <header class="view-header">
+        <div>
+          <h1>Settings</h1>
+          <p class="subtitle">Ustawienia prowizji i kopia zapasowa danych</p>
+        </div>
+      </header>
+
+      <div class="settings-banner" id="persistence-banner" style="display:none;">
+        ⚠️ Baza danych na serwerze nie jest podłączona do trwałego dysku (Render Disk) — po kolejnym wdrożeniu dane mogą zniknąć.
+        Regularnie rób kopię zapasową poniżej, a najlepiej dodaj Disk w ustawieniach Render (patrz README).
+      </div>
+
+      <div class="settings-section">
+        <h3>Podział prowizji agenta</h3>
+        <p class="settings-hint">Ten % określa, jaką część prowizji z transakcji zatrzymujesz Ty (reszta idzie do agencji). Używany do wyliczeń w danych klienta.</p>
+        <div class="settings-row">
+          <select id="settings-split">
+            <option value="45">45%</option>
+            <option value="50">50%</option>
+            <option value="55">55%</option>
+            <option value="60">60%</option>
+          </select>
+          <button class="btn btn-primary" id="btn-save-split">Zapisz</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3>Kopia zapasowa danych</h3>
+        <p class="settings-hint">Pobierz plik z kopią wszystkich Twoich klientów i akcji, albo przywróć dane z wcześniej pobranego pliku.</p>
+        <div class="settings-row">
+          <button class="btn btn-ghost" id="btn-export-backup">⬇ Pobierz kopię zapasową</button>
+          <label class="btn btn-ghost" for="import-backup-input" style="cursor:pointer;">⬆ Przywróć z pliku</label>
+          <input type="file" id="import-backup-input" accept="application/json" style="display:none;" />
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Modal: New Lead -->
+<div class="modal-overlay" id="modal-lead">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="lead-modal-title">Nowy Lead</h2>
+      <button class="modal-close" data-close="modal-lead">✕</button>
+    </div>
+    <form id="form-lead">
+      <input type="hidden" id="lead-id" />
+      <div class="field">
+        <label for="lead-imie">Imię *</label>
+        <input type="text" id="lead-imie" required />
+      </div>
+      <div class="field">
+        <label for="lead-nazwisko">Nazwisko *</label>
+        <input type="text" id="lead-nazwisko" required />
+      </div>
+      <div class="field">
+        <label for="lead-mail">Mail</label>
+        <input type="email" id="lead-mail" />
+      </div>
+      <div class="field">
+        <label for="lead-telefon">Telefon</label>
+        <input type="tel" id="lead-telefon" />
+      </div>
+      <div class="field">
+        <label for="lead-preferencje">Preferencje</label>
+        <textarea id="lead-preferencje" rows="3" placeholder="np. preferowany kontakt, zainteresowania, budżet..."></textarea>
+      </div>
+      <div class="field">
+        <label for="lead-inwestycja">Inwestycja</label>
+        <input type="text" id="lead-inwestycja" placeholder="np. nazwa inwestycji / osiedla" />
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="lead-cena">Cena nieruchomości (obliczanie prowizji)</label>
+          <input type="number" id="lead-cena" min="0" step="0.01" placeholder="np. 650000" />
+        </div>
+        <div class="field">
+          <label for="lead-prowizja-procent">Prowizja (%)</label>
+          <input type="number" id="lead-prowizja-procent" min="0" step="0.1" placeholder="np. 1.6" />
+        </div>
+      </div>
+      <div class="field" id="lead-stage-field">
+        <label for="lead-stage">Etap</label>
+        <select id="lead-stage"></select>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close="modal-lead">Anuluj</button>
+        <button type="submit" class="btn btn-primary">Zapisz</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: New Action -->
+<div class="modal-overlay" id="modal-action">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Dodaj akcję</h2>
+      <button class="modal-close" data-close="modal-action">✕</button>
+    </div>
+    <form id="form-action">
+      <input type="hidden" id="action-client-id" />
+      <div class="field">
+        <label>Klient</label>
+        <div class="static-value" id="action-client-name"></div>
+      </div>
+      <div class="field">
+        <label for="action-name">Nazwa akcji *</label>
+        <input type="text" id="action-name" placeholder="np. Zadzwonić, Wysłać ofertę..." required />
+      </div>
+      <div class="field">
+        <label for="action-date">Data *</label>
+        <input type="date" id="action-date" required />
+      </div>
+      <div class="field">
+        <label for="action-notes">Notatki</label>
+        <textarea id="action-notes" rows="3" placeholder="Dodatkowe informacje..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close="modal-action">Anuluj</button>
+        <button type="submit" class="btn btn-primary">Zapisz akcję</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Client details -->
+<div class="modal-overlay" id="modal-client-view">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <h2>Dane klienta</h2>
+      <button class="modal-close" data-close="modal-client-view">✕</button>
+    </div>
+    <div id="client-view-body"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close="modal-client-view">Zamknij</button>
+      <button type="button" class="btn btn-primary" id="client-view-edit-btn">Edytuj kontakt</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: New / Edit meeting (Calendar) -->
+<div class="modal-overlay" id="modal-meeting">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="meeting-modal-title">Nowe spotkanie</h2>
+      <button class="modal-close" data-close="modal-meeting">✕</button>
+    </div>
+    <form id="form-meeting">
+      <input type="hidden" id="meeting-id" />
+      <div class="field">
+        <label for="meeting-client">Klient *</label>
+        <select id="meeting-client" required></select>
+      </div>
+      <div class="field">
+        <label for="meeting-title">Nazwa spotkania / akcji *</label>
+        <input type="text" id="meeting-title" placeholder="np. Spotkanie handlowe" required />
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="meeting-date">Data *</label>
+          <input type="date" id="meeting-date" required />
+        </div>
+        <div class="field">
+          <label for="meeting-time">Godzina</label>
+          <input type="time" id="meeting-time" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="meeting-notes">Notatki</label>
+        <textarea id="meeting-notes" rows="3" placeholder="Dodatkowe informacje..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-danger" id="meeting-delete-btn" style="display:none; margin-right:auto;">Usuń</button>
+        <button type="button" class="btn btn-ghost" data-close="modal-meeting">Anuluj</button>
+        <button type="submit" class="btn btn-primary">Zapisz</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
