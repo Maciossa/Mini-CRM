@@ -10,60 +10,84 @@
 </head>
 <body>
 
-<!-- AUTH SCREEN: profile picker / login / register -->
+<!-- AUTH SCREEN: account login/register, then profile picker/create -->
 <div class="auth-screen" id="auth-screen">
   <div class="auth-card">
     <div class="auth-brand">
       <span class="brand-mark">◆</span> Mini CRM
     </div>
 
-    <!-- Picker state -->
-    <div id="auth-picker">
-      <p class="auth-subtitle">Wybierz swój profil albo stwórz nowy, aby korzystać z własnego, osobistego CRM.</p>
-      <div class="profile-grid" id="profile-grid"></div>
-      <button class="btn btn-primary auth-full-btn" id="btn-show-register">+ Stwórz nowy profil</button>
-    </div>
-
-    <!-- Login state -->
-    <div id="auth-login" style="display:none;">
-      <button class="auth-back" id="btn-back-from-login">← Wróć</button>
-      <div class="auth-selected-profile">
-        <div class="client-view-avatar" id="login-avatar"></div>
-        <div class="auth-selected-name" id="login-pseudonim"></div>
-      </div>
-      <form id="form-login">
-        <input type="hidden" id="login-profile-id" />
+    <!-- ACCOUNT: Login -->
+    <div id="account-login">
+      <p class="auth-subtitle">Zaloguj się do swojego konta, aby korzystać z CRM.</p>
+      <form id="form-account-login">
         <div class="field">
-          <label for="login-password">Hasło</label>
-          <input type="password" id="login-password" required autofocus />
+          <label for="acc-login-mail">Mail</label>
+          <input type="email" id="acc-login-mail" required autofocus />
         </div>
-        <p class="auth-error" id="login-error"></p>
+        <div class="field">
+          <label for="acc-login-password">Hasło</label>
+          <input type="password" id="acc-login-password" required />
+        </div>
+        <p class="auth-error" id="acc-login-error"></p>
         <button type="submit" class="btn btn-primary auth-full-btn">Zaloguj się</button>
       </form>
+      <p class="auth-switch">Nie masz konta? <button type="button" class="link-btn" id="btn-show-acc-register">Zarejestruj się</button></p>
     </div>
 
-    <!-- Register state -->
-    <div id="auth-register" style="display:none;">
-      <button class="auth-back" id="btn-back-from-register">← Wróć</button>
-      <p class="auth-subtitle">Stwórz swój profil, aby mieć własny, osobisty CRM.</p>
-      <form id="form-register">
+    <!-- ACCOUNT: Register -->
+    <div id="account-register" style="display:none;">
+      <p class="auth-subtitle">Stwórz konto, aby uzyskać dostęp do swojego prywatnego CRM.</p>
+      <form id="form-account-register">
         <div class="field">
-          <label for="reg-name">Imię i nazwisko</label>
-          <input type="text" id="reg-name" required />
+          <label for="acc-reg-mail">Mail</label>
+          <input type="email" id="acc-reg-mail" required />
         </div>
         <div class="field">
-          <label for="reg-pseudonim">Pseudonim (będzie wyświetlany)</label>
-          <input type="text" id="reg-pseudonim" required />
+          <label for="acc-reg-password">Hasło</label>
+          <input type="password" id="acc-reg-password" minlength="6" required />
+        </div>
+        <p class="auth-error" id="acc-reg-error"></p>
+        <button type="submit" class="btn btn-primary auth-full-btn">Zarejestruj się</button>
+      </form>
+      <p class="auth-switch">Masz już konto? <button type="button" class="link-btn" id="btn-show-acc-login">Zaloguj się</button></p>
+    </div>
+
+    <!-- PROFILE: Picker (no password — account already authenticated) -->
+    <div id="profile-picker" style="display:none;">
+      <p class="auth-subtitle">Wybierz profil (osobne CRM), albo stwórz nowy.</p>
+      <div class="profile-grid" id="profile-grid"></div>
+      <button class="btn btn-primary auth-full-btn" id="btn-show-profile-create">+ Nowy profil</button>
+      <p class="auth-switch"><button type="button" class="link-btn" id="btn-account-logout">Wyloguj się z konta</button></p>
+    </div>
+
+    <!-- PROFILE: Create (Imię i nazwisko, Pseudonim, Rynek — no mail/password) -->
+    <div id="profile-create" style="display:none;">
+      <button class="auth-back" id="btn-back-from-profile-create">← Wróć</button>
+      <p class="auth-subtitle">Stwórz nowy profil — osobne CRM z własnym pipeline'em.</p>
+      <form id="form-profile-create">
+        <div class="field">
+          <label for="prof-name">Imię i nazwisko</label>
+          <input type="text" id="prof-name" required />
         </div>
         <div class="field">
-          <label for="reg-mail">Mail</label>
-          <input type="email" id="reg-mail" required />
+          <label for="prof-pseudonim">Pseudonim (będzie wyświetlany)</label>
+          <input type="text" id="prof-pseudonim" required />
         </div>
         <div class="field">
-          <label for="reg-password">Hasło</label>
-          <input type="password" id="reg-password" minlength="6" required />
+          <label>Rynek</label>
+          <div class="market-toggle">
+            <label class="market-option">
+              <input type="radio" name="prof-rynek" value="pierwotny" checked />
+              <span>Rynek Pierwotny</span>
+            </label>
+            <label class="market-option">
+              <input type="radio" name="prof-rynek" value="wtorny" />
+              <span>Rynek Wtórny</span>
+            </label>
+          </div>
         </div>
-        <p class="auth-error" id="register-error"></p>
+        <p class="auth-error" id="profile-create-error"></p>
         <button type="submit" class="btn btn-primary auth-full-btn">Stwórz profil</button>
       </form>
     </div>
@@ -195,12 +219,19 @@
             <div class="client-view-value" id="profile-pseudonim"></div>
           </div>
           <div>
-            <div class="client-view-label">Mail</div>
+            <div class="client-view-label">Rynek</div>
+            <div class="client-view-value" id="profile-rynek"></div>
+          </div>
+          <div>
+            <div class="client-view-label">Mail konta</div>
             <div class="client-view-value" id="profile-mail"></div>
           </div>
         </div>
       </div>
-      <button class="btn btn-ghost" id="btn-logout" style="margin-top:20px;">Wyloguj się / zmień profil</button>
+      <div style="display:flex; gap:10px; margin-top:20px;">
+        <button class="btn btn-ghost" id="btn-switch-profile">Zmień profil</button>
+        <button class="btn btn-ghost" id="btn-logout">Wyloguj się z konta</button>
+      </div>
     </section>
 
     <!-- SETTINGS VIEW -->
