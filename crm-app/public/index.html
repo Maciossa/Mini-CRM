@@ -119,6 +119,9 @@
       <button class="nav-item" data-view="settings">
         <span class="nav-icon">⚙</span> Settings
       </button>
+      <button class="nav-item" data-view="statistics">
+        <span class="nav-icon">◈</span> Statistics
+      </button>
     </div>
     <div class="sidebar-footer" id="sidebar-current-user"></div>
   </nav>
@@ -130,12 +133,34 @@
     <section id="view-deals" class="view active">
       <header class="view-header">
         <div>
-          <h1>Deals</h1>
-          <p class="subtitle">Przeciągnij kartę, aby zmienić etap klienta</p>
+          <div class="deals-subnav">
+            <button class="deals-subtab active" id="subtab-board">Deals</button>
+            <button class="deals-subtab" id="subtab-closed">Closed Deals</button>
+          </div>
+          <p class="subtitle" id="deals-subtitle">Przeciągnij kartę, aby zmienić etap klienta</p>
         </div>
         <button class="btn btn-primary" id="btn-new-lead">+ Nowy Lead</button>
       </header>
       <div class="board" id="board"><!-- columns injected by JS --></div>
+
+      <div class="closed-deals-panel" id="closed-deals-panel" style="display:none;">
+        <div class="closed-deals-columns">
+          <div class="closed-zone closed-zone-won">
+            <div class="closed-zone-header">
+              <span class="closed-zone-title">✅ Udana</span>
+              <span class="closed-zone-count" id="closed-won-count">0</span>
+            </div>
+            <div class="closed-zone-body" id="closed-won-list"></div>
+          </div>
+          <div class="closed-zone closed-zone-lost">
+            <div class="closed-zone-header">
+              <span class="closed-zone-title">❌ Nie udana</span>
+              <span class="closed-zone-count" id="closed-lost-count">0</span>
+            </div>
+            <div class="closed-zone-body" id="closed-lost-list"></div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- CONTACTS VIEW -->
@@ -271,6 +296,39 @@
           <input type="file" id="import-backup-input" accept="application/json" style="display:none;" />
         </div>
       </div>
+    </section>
+
+    <!-- STATISTICS VIEW -->
+    <section id="view-statistics" class="view">
+      <header class="view-header">
+        <div>
+          <h1>Statistics</h1>
+          <p class="subtitle">Statystyki liczone wyłącznie z transakcji zamkniętych jako „Udana”</p>
+        </div>
+      </header>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Suma Prowizji Netto</div>
+          <div class="stat-value" id="stat-agent-sum">—</div>
+          <div class="stat-hint">Suma „Udział agenta” ze wszystkich udanych transakcji</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Łączny przychód wygenerowany przez agenta</div>
+          <div class="stat-value" id="stat-revenue-sum">—</div>
+          <div class="stat-hint">Suma prowizji agencji ze wszystkich udanych transakcji</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Suma Podatków (15%)</div>
+          <div class="stat-value" id="stat-tax-sum">—</div>
+          <div class="stat-hint">Suma podatku odprowadzonego od udziału agenta</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Średnia wartość prowizji na transakcję</div>
+          <div class="stat-value" id="stat-avg-net">—</div>
+          <div class="stat-hint">Średnia z „Do wypłaty” na udaną transakcję</div>
+        </div>
+      </div>
+      <p class="stats-count" id="stats-count"></p>
     </section>
 
   </main>
