@@ -539,7 +539,11 @@ function renderContacts() {
       <td>${escapeHtml(c.mail) || '—'}</td>
       <td>${escapeHtml(c.telefon) || '—'}</td>
       <td>${escapeHtml(c.inwestycja) || '—'}</td>
-      <td>${c.cena_nieruchomosci ? formatMoney(c.cena_nieruchomosci) : '—'}</td>
+      <td>${(() => {
+        if (!c.cena_nieruchomosci || !c.prowizja_procent) return '—';
+        const split = (currentProfile && currentProfile.prowizja_agenta) || 50;
+        return formatMoney(computeCommission(c.cena_nieruchomosci, c.prowizja_procent, split).net);
+      })()}</td>
       <td>${escapeHtml(c.preferencje) || '—'}</td>
       <td><span class="stage-pill" style="--stage-color:${STAGE_COLORS[c.stage]}">${escapeHtml(c.stage)}</span></td>
       <td>
@@ -707,7 +711,7 @@ function renderCalendar() {
     dayEl.addEventListener('click', e => {
       const chip = e.target.closest('.calendar-chip');
       if (chip) {
-        openMeetingModal({ activityId: chip.dataset.activityId });
+        openMeetingViewModal(chip.dataset.activityId);
       } else {
         openMeetingModal({ date: dayEl.dataset.date });
       }
@@ -732,6 +736,60 @@ $('#cal-today').addEventListener('click', () => {
   renderCalendar();
 });
 $('#btn-new-meeting').addEventListener('click', () => openMeetingModal({}));
+
+// ---------------------------------------------------------------------
+// MODAL: Meeting details (read-only view, opened from Calendar)
+// ---------------------------------------------------------------------
+function openMeetingViewModal(activityId) {
+  const a = activities.find(x => x.id === activityId);
+  if (!a) return;
+  const client = clients.find(c => c.id === a.client_id);
+
+  const body = $('#meeting-view-body');
+  body.innerHTML = `
+    <div class="client-view-grid">
+      <div class="full">
+        <div class="client-view-label">Klient</div>
+        <div class="client-view-value">${escapeHtml(a.client_name || (client ? `${client.imie} ${client.nazwisko}` : '—'))}</div>
+      </div>
+      <div class="full">
+        <div class="client-view-label">Nazwa spotkania / akcji</div>
+        <div class="client-view-value">${escapeHtml(a.action_name)}</div>
+      </div>
+      <div>
+        <div class="client-view-label">Data</div>
+        <div class="client-view-value">${new Date(a.date + 'T00:00:00').toLocaleDateString('pl-PL')}</div>
+      </div>
+      <div>
+        <div class="client-view-label">Godzina</div>
+        <div class="client-view-value">${escapeHtml(a.time) || '—'}</div>
+      </div>
+      <div class="full">
+        <div class="client-view-label">Status</div>
+        <div class="client-view-value">${a.done ? 'Wykonane' : 'Zaplanowane'}</div>
+      </div>
+      <div class="full">
+        <div class="client-view-label">Notatki</div>
+        <div class="client-view-value">${escapeHtml(a.notes) || '—'}</div>
+      </div>
+    </div>
+  `;
+
+  $('#meeting-view-delete-btn').onclick = async () => {
+    if (!confirm('Usunąć to spotkanie?')) return;
+    try {
+      await api(`/activities/${activityId}`, { method: 'DELETE' });
+      await refreshAll();
+      renderCalendar();
+      closeModal('modal-meeting-view');
+      toast('Spotkanie usunięte.');
+    } catch (err) {
+      toast(err.message);
+    }
+  };
+
+  openModal('modal-meeting-view');
+}
 
 // ---------------------------------------------------------------------
 // MODAL: New / Edit meeting (used by Calendar)
