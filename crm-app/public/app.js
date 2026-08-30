@@ -17,9 +17,6 @@ function marketLabel(rynek) {
   return rynek === 'wtorny' ? 'Rynek Wtórny' : 'Rynek Pierwotny';
 }
 
-// ---------------------------------------------------------------------
-// AUTH GATE: account login/register -> profile picker/create -> app
-// ---------------------------------------------------------------------
 async function bootstrap() {
   try {
     const res = await fetch('/api/session');
@@ -86,7 +83,6 @@ async function selectProfile(id) {
   }
 }
 
-// ---- Account login / register ----
 $('#btn-show-acc-register').addEventListener('click', () => showAuthScreen('account-register'));
 $('#btn-show-acc-login').addEventListener('click', () => showAuthScreen('account-login'));
 
@@ -137,7 +133,6 @@ $('#form-account-register').addEventListener('submit', async e => {
 
 $('#btn-account-logout').addEventListener('click', () => doLogout());
 
-// ---- Profile picker / create (no password — account already authenticated) ----
 $('#btn-show-profile-create').addEventListener('click', () => {
   showAuthScreen('profile-create');
   $('#form-profile-create').reset();
@@ -170,7 +165,6 @@ $('#form-profile-create').addEventListener('submit', async e => {
   }
 });
 
-// ---- In-app: switch profile / full logout ----
 $('#btn-switch-profile').addEventListener('click', () => {
   currentProfile = null;
   clients = [];
@@ -199,9 +193,6 @@ function resetToDealsView() {
   $('#view-deals').classList.add('active');
 }
 
-// ---------------------------------------------------------------------
-// Navigation
-// ---------------------------------------------------------------------
 $$('.nav-item').forEach(btn => {
   btn.addEventListener('click', () => {
     $$('.nav-item').forEach(b => b.classList.remove('active'));
@@ -214,12 +205,10 @@ $$('.nav-item').forEach(btn => {
     if (view === 'calendar') renderCalendar();
     if (view === 'profile') renderProfileView();
     if (view === 'settings') renderSettingsView();
+    if (view === 'statistics') renderStatisticsView();
   });
 });
 
-// ---------------------------------------------------------------------
-// API helpers
-// ---------------------------------------------------------------------
 async function api(path, options = {}) {
   const res = await fetch(`/api${path}`, {
     headers: { 'Content-Type': 'application/json' },
@@ -256,9 +245,29 @@ function renderProfileView() {
   $('#profile-mail').textContent = currentAccount ? currentAccount.mail : '—';
 }
 
-// ---------------------------------------------------------------------
-// SETTINGS VIEW
-// ---------------------------------------------------------------------
+function renderStatisticsView() {
+  const split = (currentProfile && currentProfile.prowizja_agenta) || 50;
+  const wonDeals = clients.filter(c => c.deal_status === 'won' && c.cena_nieruchomosci && c.prowizja_procent);
+
+  let sumAgentGross = 0, sumCommissionAmount = 0, sumTax = 0, sumNet = 0;
+  wonDeals.forEach(c => {
+    const com = computeCommission(c.cena_nieruchomosci, c.prowizja_procent, split);
+    sumAgentGross += com.agentGross;
+    sumCommissionAmount += com.commissionAmount;
+    sumTax += com.tax;
+    sumNet += com.net;
+  });
+  const avgNet = wonDeals.length ? sumNet / wonDeals.length : 0;
+
+  $('#stat-agent-sum').textContent = formatMoney(sumAgentGross);
+  $('#stat-revenue-sum').textContent = formatMoney(sumCommissionAmount);
+  $('#stat-tax-sum').textContent = formatMoney(sumTax);
+  $('#stat-avg-net').textContent = formatMoney(avgNet);
+  $('#stats-count').textContent = wonDeals.length
+    ? `Na podstawie ${wonDeals.length} udanych transakcji z uzupełnioną ceną i prowizją.`
+    : 'Brak udanych transakcji z uzupełnioną ceną nieruchomości i prowizją.';
+}
+
 async function renderSettingsView() {
   if (!currentProfile) return;
   $('#settings-split').value = String(currentProfile.prowizja_agenta || 50);
@@ -319,9 +328,6 @@ $('#import-backup-input').addEventListener('change', async e => {
   }
 });
 
-// ---------------------------------------------------------------------
-// Init
-// ---------------------------------------------------------------------
 async function init() {
   STAGES = await api('/stages');
   STAGES.forEach((s, i) => STAGE_COLORS[s] = `var(--stage-${i + 1})`);
@@ -345,7 +351,6 @@ function formatMoney(n) {
   return Number(n).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' zł';
 }
 
-// Cena nieruchomości -> kwota prowizji agencji -> udział agenta (Settings) -> po podatku 15%
 function computeCommission(price, commissionPct, splitPct) {
   const commissionAmount = price * (commissionPct / 100);
   const agentGross = commissionAmount * (splitPct / 100);
@@ -360,13 +365,11 @@ function escapeHtml(str) {
   }[m]));
 }
 
-// ---------------------------------------------------------------------
-// DEALS BOARD
-// ---------------------------------------------------------------------
 function renderBoard() {
   const board = $('#board');
+  const openClients = clients.filter(c => !c.deal_status);
   board.innerHTML = STAGES.map((stage, i) => {
-    const stageClients = clients.filter(c => c.stage === stage);
+    const stageClients = openClients.filter(c => c.stage === stage);
     return `
       <div class="column" data-stage="${escapeHtml(stage)}">
         <div class="column-header" style="--stage-color:${STAGE_COLORS[stage]}">
@@ -415,7 +418,7 @@ function attachBoardEvents() {
       draggedId = null;
     });
     card.addEventListener('click', e => {
-      if (e.target.closest('button')) return; // buttons handle their own actions
+      if (e.target.closest('button')) return;
       openClientViewModal(card.dataset.id);
     });
   });
@@ -448,9 +451,78 @@ function attachBoardEvents() {
   $$('.btn-edit').forEach(btn => btn.addEventListener('click', () => openLeadModal(btn.dataset.id)));
 }
 
-// ---------------------------------------------------------------------
-// CLIENT DETAILS MODAL (click on a Deals card)
-// ---------------------------------------------------------------------
+$('#subtab-board').addEventListener('click', () => {
+  $('#subtab-board').classList.add('active');
+  $('#subtab-closed').classList.remove('active');
+  $('#board').style.display = 'flex';
+  $('#closed-deals-panel').style.display = 'none';
+  $('#deals-subtitle').textContent = 'Przeciągnij kartę, aby zmienić etap klienta';
+  $('#btn-new-lead').style.display = 'inline-block';
+});
+$('#subtab-closed').addEventListener('click', () => {
+  $('#subtab-board').classList.remove('active');
+  $('#subtab-closed').classList.add('active');
+  $('#board').style.display = 'none';
+  $('#closed-deals-panel').style.display = 'block';
+  $('#deals-subtitle').textContent = 'Transakcje zamknięte jako Udana lub Nie udana';
+  $('#btn-new-lead').style.display = 'none';
+  renderClosedDeals();
+});
+
+function renderClosedDeals() {
+  const won = clients.filter(c => c.deal_status === 'won');
+  const lost = clients.filter(c => c.deal_status === 'lost');
+
+  $('#closed-won-count').textContent = won.length;
+  $('#closed-lost-count').textContent = lost.length;
+
+  $('#closed-won-list').innerHTML = won.length ? won.map(c => `
+    <div class="closed-card" data-id="${c.id}">
+      <div class="closed-card-name">${escapeHtml(c.imie)} ${escapeHtml(c.nazwisko)}</div>
+      <div class="closed-card-meta">${escapeHtml(c.telefon || 'brak telefonu')}</div>
+    </div>
+  `).join('') : '<div class="closed-zone-empty">Brak udanych transakcji</div>';
+
+  $('#closed-lost-list').innerHTML = lost.length ? lost.map(c => `
+    <div class="closed-card" data-id="${c.id}">
+      <div class="closed-card-name">${escapeHtml(c.imie)} ${escapeHtml(c.nazwisko)}</div>
+      <div class="closed-card-meta">${escapeHtml(c.telefon || 'brak telefonu')}</div>
+      <button class="btn-small btn-return-to-pipeline" data-id="${c.id}">Wróć do lejka Deals</button>
+    </div>
+  `).join('') : '<div class="closed-zone-empty">Brak nieudanych transakcji</div>';
+
+  $$('#closed-won-list .closed-card, #closed-lost-list .closed-card').forEach(card => {
+    card.addEventListener('click', e => {
+      if (e.target.closest('button')) return;
+      openClientViewModal(card.dataset.id);
+    });
+  });
+  $$('.btn-return-to-pipeline').forEach(btn => btn.addEventListener('click', async e => {
+    e.stopPropagation();
+    try {
+      await api(`/clients/${btn.dataset.id}`, { method: 'PUT', body: JSON.stringify({ deal_status: null }) });
+      await refreshAll();
+      renderClosedDeals();
+      renderBoard();
+      toast('Klient wrócił do lejka Deals.');
+    } catch (err) {
+      toast(err.message);
+    }
+  }));
+}
+
+async function closeDeal(id, status) {
+  try {
+    await api(`/clients/${id}`, { method: 'PUT', body: JSON.stringify({ deal_status: status }) });
+    await refreshAll();
+    renderBoard();
+    closeModal('modal-client-view');
+    toast(status === 'won' ? 'Transakcja oznaczona jako Udana.' : 'Transakcja oznaczona jako Nie udana.');
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
 function openClientViewModal(id) {
   const c = clients.find(x => x.id === id);
   if (!c) return;
@@ -504,6 +576,15 @@ function openClientViewModal(id) {
         <div class="commission-row final"><span>Do wypłaty</span><span>${formatMoney(commission.net)}</span></div>
       </div>
     ` : ''}
+    <div class="client-view-section-title">Zamknij transakcję</div>
+    ${c.deal_status ? `
+      <span class="deal-status-pill ${c.deal_status}">${c.deal_status === 'won' ? '✅ Udana' : '❌ Nie udana'}</span>
+    ` : `
+      <div class="close-deal-buttons">
+        <button class="btn btn-ghost" id="close-deal-won-btn">✅ Udana</button>
+        <button class="btn btn-ghost" id="close-deal-lost-btn">❌ Nie udana</button>
+      </div>
+    `}
     <div class="client-view-section-title">Zaplanowane akcje (${clientActivities.length})</div>
     <div class="client-view-activities">
       ${clientActivities.length ? clientActivities.map(a => `
@@ -520,12 +601,14 @@ function openClientViewModal(id) {
     openLeadModal(id);
   };
 
+  const wonBtn = $('#close-deal-won-btn');
+  const lostBtn = $('#close-deal-lost-btn');
+  if (wonBtn) wonBtn.addEventListener('click', () => closeDeal(id, 'won'));
+  if (lostBtn) lostBtn.addEventListener('click', () => closeDeal(id, 'lost'));
+
   openModal('modal-client-view');
 }
 
-// ---------------------------------------------------------------------
-// CONTACTS TABLE
-// ---------------------------------------------------------------------
 function renderContacts() {
   const body = $('#contacts-body');
   if (!clients.length) {
@@ -572,9 +655,6 @@ async function deleteClient(id) {
   }
 }
 
-// ---------------------------------------------------------------------
-// ACTIVITIES LIST
-// ---------------------------------------------------------------------
 const WEEKDAYS = ['Nd', 'Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb'];
 
 function renderActivities() {
@@ -588,7 +668,6 @@ function renderActivities() {
 
   list.innerHTML = sorted.map(a => {
     const d = new Date(a.date + 'T00:00:00');
-    // Delikatne czerwone podświetlenie od dnia, w którym akcja ma być wykonana (i dalej, jeśli zaległa)
     const attention = !a.done && d <= today;
     const day = String(d.getDate()).padStart(2, '0');
     const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -637,11 +716,8 @@ function renderActivities() {
   $$('.activity-clickable').forEach(el => el.addEventListener('click', () => openMeetingModal({ activityId: el.dataset.id })));
 }
 
-// ---------------------------------------------------------------------
-// CALENDAR
-// ---------------------------------------------------------------------
 const MONTHS_PL = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
-let calYear, calMonth; // calMonth is 0-indexed
+let calYear, calMonth;
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 function dateStr(y, m, d) { return `${y}-${pad2(m + 1)}-${pad2(d)}`; }
@@ -660,7 +736,6 @@ function renderCalendar() {
 
   const grid = $('#calendar-grid');
   const firstOfMonth = new Date(calYear, calMonth, 1);
-  // Monday = 0 ... Sunday = 6
   const startOffset = (firstOfMonth.getDay() + 6) % 7;
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const daysInPrevMonth = new Date(calYear, calMonth, 0).getDate();
@@ -668,17 +743,14 @@ function renderCalendar() {
   const todayStr = dateStr(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
 
   const cells = [];
-  // leading days from previous month
   for (let i = 0; i < startOffset; i++) {
     const d = daysInPrevMonth - startOffset + i + 1;
     const prevMonthDate = new Date(calYear, calMonth - 1, d);
     cells.push({ d, ds: dateStr(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), d), outside: true });
   }
-  // current month days
   for (let d = 1; d <= daysInMonth; d++) {
     cells.push({ d, ds: dateStr(calYear, calMonth, d), outside: false });
   }
-  // trailing days to complete the grid (multiple of 7)
   let nextDay = 1;
   while (cells.length % 7 !== 0 || cells.length < 35) {
     const nextMonthDate = new Date(calYear, calMonth + 1, nextDay);
@@ -737,9 +809,6 @@ $('#cal-today').addEventListener('click', () => {
 });
 $('#btn-new-meeting').addEventListener('click', () => openMeetingModal({}));
 
-// ---------------------------------------------------------------------
-// MODAL: Meeting details (read-only view, opened from Calendar)
-// ---------------------------------------------------------------------
 function openMeetingViewModal(activityId) {
   const a = activities.find(x => x.id === activityId);
   if (!a) return;
@@ -791,9 +860,6 @@ function openMeetingViewModal(activityId) {
   openModal('modal-meeting-view');
 }
 
-// ---------------------------------------------------------------------
-// MODAL: New / Edit meeting (used by Calendar)
-// ---------------------------------------------------------------------
 function openMeetingModal({ date, activityId }) {
   const form = $('#form-meeting');
   form.reset();
@@ -867,9 +933,6 @@ $('#meeting-delete-btn').addEventListener('click', async () => {
   }
 });
 
-// ---------------------------------------------------------------------
-// MODALS: New / Edit Lead
-// ---------------------------------------------------------------------
 function openModal(id) { $(`#${id}`).classList.add('open'); }
 function closeModal(id) { $(`#${id}`).classList.remove('open'); }
 
@@ -939,9 +1002,6 @@ $('#form-lead').addEventListener('submit', async e => {
   }
 });
 
-// ---------------------------------------------------------------------
-// MODAL: New Action
-// ---------------------------------------------------------------------
 function openActionModal(clientId) {
   const c = clients.find(x => x.id === clientId);
   if (!c) return;
