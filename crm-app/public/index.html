@@ -156,7 +156,7 @@
               <th>Mail</th>
               <th>Telefon</th>
               <th>Inwestycja</th>
-              <th>Cena nieruchomości</th>
+              <th>Prowizja</th>
               <th>Preferencje</th>
               <th>Etap</th>
               <th></th>
@@ -376,6 +376,20 @@
       <button type="button" class="btn btn-ghost" data-close="modal-client-view">Zamknij</button>
       <button type="button" class="btn btn-primary" id="client-view-edit-btn">Edytuj kontakt</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal: Meeting details (read-only, from Calendar) -->
+<div class="modal-overlay" id="modal-meeting-view">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Szczegóły spotkania</h2>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <button class="modal-icon-btn modal-icon-danger" id="meeting-view-delete-btn" title="Usuń">🗑</button>
+        <button class="modal-close" data-close="modal-meeting-view">✕</button>
+      </div>
+    </div>
+    <div id="meeting-view-body"></div>
   </div>
 </div>
 
