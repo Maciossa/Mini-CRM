@@ -382,6 +382,20 @@ input, textarea, select { font-family: inherit; }
   font-size: 15px;
   color: var(--text-muted);
 }
+.modal-icon-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-icon-btn:hover { background: #F0F1F5; }
+.modal-icon-danger:hover { background: #FDECEC; border-color: #F3D2D2; color: #B91C1C; }
 .modal-wide { width: 480px; }
 .field-row { display: flex; gap: 12px; align-items: flex-end; }
 .field-row .field { flex: 1; min-width: 0; }
