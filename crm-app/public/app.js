@@ -2,7 +2,8 @@ const STAGE_COLORS = {};
 let STAGES = [];
 let clients = [];
 let activities = [];
-let currentUser = null;
+let currentAccount = null;
+let currentProfile = null;
 
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
@@ -12,137 +13,191 @@ function initials2(name) {
   return ((parts[0] || '')[0] || '') + ((parts[1] || '')[0] || (parts[0] || '')[1] || '');
 }
 
+function marketLabel(rynek) {
+  return rynek === 'wtorny' ? 'Rynek Wtórny' : 'Rynek Pierwotny';
+}
+
 // ---------------------------------------------------------------------
-// AUTH GATE: profile picker / login / register
+// AUTH GATE: account login/register -> profile picker/create -> app
 // ---------------------------------------------------------------------
 async function bootstrap() {
   try {
-    const res = await fetch('/api/auth/me');
+    const res = await fetch('/api/session');
     if (res.ok) {
-      currentUser = await res.json();
-      showApp();
+      const data = await res.json();
+      currentAccount = data.account;
+      if (data.profile) {
+        currentProfile = data.profile;
+        showApp();
+        return;
+      }
+      showAuthScreen('profile-picker');
+      loadProfilePicker();
       return;
     }
-  } catch (e) { /* fall through to auth screen */ }
-  showAuthScreen();
+  } catch (e) { /* fall through to account login */ }
+  showAuthScreen('account-login');
 }
 
-function showAuthScreen() {
+const AUTH_STATES = ['account-login', 'account-register', 'profile-picker', 'profile-create'];
+function showAuthScreen(state) {
   $('#app-root').style.display = 'none';
   $('#auth-screen').style.display = 'flex';
-  loadProfilePicker();
+  AUTH_STATES.forEach(s => { $(`#${s}`).style.display = s === state ? 'block' : 'none'; });
 }
 
 async function showApp() {
   $('#auth-screen').style.display = 'none';
   $('#app-root').style.display = 'flex';
-  $('#sidebar-current-user').textContent = `Zalogowano jako ${currentUser.pseudonim}`;
+  $('#sidebar-current-user').textContent = `${currentProfile.pseudonim} · ${marketLabel(currentProfile.rynek)}`;
   await init();
 }
 
 async function loadProfilePicker() {
-  setAuthState('picker');
   const grid = $('#profile-grid');
   grid.innerHTML = '<div class="profile-empty">Wczytywanie profili...</div>';
   try {
-    const profiles = await (await fetch('/api/auth/profiles')).json();
+    const profiles = await (await fetch('/api/profiles')).json();
     if (!profiles.length) {
-      grid.innerHTML = '<div class="profile-empty">Brak profili. Stwórz pierwszy, aby zacząć.</div>';
+      grid.innerHTML = '<div class="profile-empty">Brak profili na tym koncie. Stwórz pierwszy, aby zacząć.</div>';
       return;
     }
     grid.innerHTML = profiles.map(p => `
-      <div class="profile-tile" data-id="${p.id}" data-pseudonim="${escapeHtml(p.pseudonim)}">
+      <div class="profile-tile" data-id="${p.id}">
         <div class="avatar" style="--stage-color:var(--gold); width:34px;height:34px;font-size:13px;">${escapeHtml(initials2(p.pseudonim))}</div>
         <div class="profile-tile-name">${escapeHtml(p.pseudonim)}</div>
       </div>
     `).join('');
-    $$('.profile-tile').forEach(tile => tile.addEventListener('click', () => {
-      showLoginFor(tile.dataset.id, tile.dataset.pseudonim);
-    }));
+    $$('.profile-tile').forEach(tile => tile.addEventListener('click', () => selectProfile(tile.dataset.id)));
   } catch (e) {
     grid.innerHTML = '<div class="profile-empty">Nie udało się wczytać profili.</div>';
   }
 }
 
-function setAuthState(state) {
-  $('#auth-picker').style.display = state === 'picker' ? 'block' : 'none';
-  $('#auth-login').style.display = state === 'login' ? 'block' : 'none';
-  $('#auth-register').style.display = state === 'register' ? 'block' : 'none';
-}
-
-function showLoginFor(id, pseudonim) {
-  setAuthState('login');
-  $('#login-profile-id').value = id;
-  $('#login-pseudonim').textContent = pseudonim;
-  $('#login-avatar').textContent = initials2(pseudonim).toUpperCase();
-  $('#login-password').value = '';
-  $('#login-error').textContent = '';
-  setTimeout(() => $('#login-password').focus(), 50);
-}
-
-$('#btn-show-register').addEventListener('click', () => {
-  setAuthState('register');
-  $('#form-register').reset();
-  $('#register-error').textContent = '';
-});
-$('#btn-back-from-login').addEventListener('click', loadProfilePicker);
-$('#btn-back-from-register').addEventListener('click', loadProfilePicker);
-
-$('#form-login').addEventListener('submit', async e => {
-  e.preventDefault();
-  $('#login-error').textContent = '';
+async function selectProfile(id) {
   try {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(`/api/profiles/${id}/select`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Nie udało się wybrać profilu.');
+    currentProfile = data;
+    showApp();
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+// ---- Account login / register ----
+$('#btn-show-acc-register').addEventListener('click', () => showAuthScreen('account-register'));
+$('#btn-show-acc-login').addEventListener('click', () => showAuthScreen('account-login'));
+
+$('#form-account-login').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('#acc-login-error').textContent = '';
+  try {
+    const res = await fetch('/api/account/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        profileId: $('#login-profile-id').value,
-        password: $('#login-password').value
+        mail: $('#acc-login-mail').value.trim(),
+        password: $('#acc-login-password').value
       })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Nie udało się zalogować.');
-    currentUser = data;
-    showApp();
+    currentAccount = data;
+    showAuthScreen('profile-picker');
+    loadProfilePicker();
   } catch (err) {
-    $('#login-error').textContent = err.message;
+    $('#acc-login-error').textContent = err.message;
   }
 });
 
-$('#form-register').addEventListener('submit', async e => {
+$('#form-account-register').addEventListener('submit', async e => {
   e.preventDefault();
-  $('#register-error').textContent = '';
+  $('#acc-reg-error').textContent = '';
   try {
-    const res = await fetch('/api/auth/register', {
+    const res = await fetch('/api/account/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        imie_nazwisko: $('#reg-name').value.trim(),
-        pseudonim: $('#reg-pseudonim').value.trim(),
-        mail: $('#reg-mail').value.trim(),
-        password: $('#reg-password').value
+        mail: $('#acc-reg-mail').value.trim(),
+        password: $('#acc-reg-password').value
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Nie udało się stworzyć konta.');
+    currentAccount = data;
+    showAuthScreen('profile-create');
+    $('#form-profile-create').reset();
+    $('#profile-create-error').textContent = '';
+  } catch (err) {
+    $('#acc-reg-error').textContent = err.message;
+  }
+});
+
+$('#btn-account-logout').addEventListener('click', () => doLogout());
+
+// ---- Profile picker / create (no password — account already authenticated) ----
+$('#btn-show-profile-create').addEventListener('click', () => {
+  showAuthScreen('profile-create');
+  $('#form-profile-create').reset();
+  $('#profile-create-error').textContent = '';
+});
+$('#btn-back-from-profile-create').addEventListener('click', () => {
+  showAuthScreen('profile-picker');
+  loadProfilePicker();
+});
+
+$('#form-profile-create').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('#profile-create-error').textContent = '';
+  try {
+    const res = await fetch('/api/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imie_nazwisko: $('#prof-name').value.trim(),
+        pseudonim: $('#prof-pseudonim').value.trim(),
+        rynek: $('input[name="prof-rynek"]:checked').value
       })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Nie udało się stworzyć profilu.');
-    currentUser = data;
+    currentProfile = data;
     showApp();
   } catch (err) {
-    $('#register-error').textContent = err.message;
+    $('#profile-create-error').textContent = err.message;
   }
 });
 
-$('#btn-logout').addEventListener('click', async () => {
-  try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) { /* ignore */ }
-  currentUser = null;
+// ---- In-app: switch profile / full logout ----
+$('#btn-switch-profile').addEventListener('click', () => {
+  currentProfile = null;
   clients = [];
   activities = [];
+  resetToDealsView();
+  showAuthScreen('profile-picker');
+  loadProfilePicker();
+});
+
+$('#btn-logout').addEventListener('click', () => doLogout());
+
+async function doLogout() {
+  try { await fetch('/api/account/logout', { method: 'POST' }); } catch (e) { /* ignore */ }
+  currentAccount = null;
+  currentProfile = null;
+  clients = [];
+  activities = [];
+  resetToDealsView();
+  showAuthScreen('account-login');
+}
+
+function resetToDealsView() {
   $$('.nav-item').forEach(b => b.classList.remove('active'));
   $('.nav-item[data-view="deals"]').classList.add('active');
   $$('.view').forEach(v => v.classList.remove('active'));
   $('#view-deals').classList.add('active');
-  showAuthScreen();
-});
+}
 
 // ---------------------------------------------------------------------
 // Navigation
@@ -171,8 +226,9 @@ async function api(path, options = {}) {
     ...options
   });
   if (res.status === 401) {
-    currentUser = null;
-    showAuthScreen();
+    currentAccount = null;
+    currentProfile = null;
+    showAuthScreen('account-login');
     throw new Error('Sesja wygasła. Zaloguj się ponownie.');
   }
   if (!res.ok) {
@@ -192,19 +248,20 @@ function toast(msg) {
 }
 
 function renderProfileView() {
-  if (!currentUser) return;
-  $('#profile-avatar').textContent = initials2(currentUser.pseudonim).toUpperCase();
-  $('#profile-full-name').textContent = currentUser.imie_nazwisko;
-  $('#profile-pseudonim').textContent = currentUser.pseudonim;
-  $('#profile-mail').textContent = currentUser.mail;
+  if (!currentProfile) return;
+  $('#profile-avatar').textContent = initials2(currentProfile.pseudonim).toUpperCase();
+  $('#profile-full-name').textContent = currentProfile.imie_nazwisko;
+  $('#profile-pseudonim').textContent = currentProfile.pseudonim;
+  $('#profile-rynek').textContent = marketLabel(currentProfile.rynek);
+  $('#profile-mail').textContent = currentAccount ? currentAccount.mail : '—';
 }
 
 // ---------------------------------------------------------------------
 // SETTINGS VIEW
 // ---------------------------------------------------------------------
 async function renderSettingsView() {
-  if (!currentUser) return;
-  $('#settings-split').value = String(currentUser.prowizja_agenta || 50);
+  if (!currentProfile) return;
+  $('#settings-split').value = String(currentProfile.prowizja_agenta || 50);
 
   try {
     const status = await (await fetch('/api/system/status')).json();
@@ -214,11 +271,11 @@ async function renderSettingsView() {
 
 $('#btn-save-split').addEventListener('click', async () => {
   try {
-    const data = await api('/auth/settings', {
+    const data = await api('/profiles/me/settings', {
       method: 'PUT',
       body: JSON.stringify({ prowizja_agenta: $('#settings-split').value })
     });
-    currentUser = data;
+    currentProfile = data;
     toast('Podział prowizji zapisany.');
   } catch (err) {
     toast(err.message);
@@ -234,7 +291,7 @@ $('#btn-export-backup').addEventListener('click', async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `mini-crm-kopia-${currentUser.pseudonim}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `mini-crm-kopia-${currentProfile.pseudonim}-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -402,7 +459,7 @@ function openClientViewModal(id) {
     .filter(a => a.client_id === id)
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  const split = (currentUser && currentUser.prowizja_agenta) || 50;
+  const split = (currentProfile && currentProfile.prowizja_agenta) || 50;
   const hasCommissionData = c.cena_nieruchomosci && c.prowizja_procent;
   const commission = hasCommissionData ? computeCommission(c.cena_nieruchomosci, c.prowizja_procent, split) : null;
 
