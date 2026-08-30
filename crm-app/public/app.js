@@ -606,6 +606,27 @@ function openClientViewModal(id) {
   if (wonBtn) wonBtn.addEventListener('click', () => closeDeal(id, 'won'));
   if (lostBtn) lostBtn.addEventListener('click', () => closeDeal(id, 'lost'));
 
+  const deleteBtn = $('#client-view-delete-btn');
+  if (c.deal_status) {
+    deleteBtn.style.display = 'flex';
+    deleteBtn.onclick = async () => {
+      if (!confirm('Usunąć tę zamkniętą transakcję na stałe? Tej operacji nie można cofnąć.')) return;
+      try {
+        await api(`/clients/${id}`, { method: 'DELETE' });
+        await refreshAll();
+        renderClosedDeals();
+        renderBoard();
+        closeModal('modal-client-view');
+        toast('Zamknięta transakcja usunięta.');
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+  } else {
+    deleteBtn.style.display = 'none';
+    deleteBtn.onclick = null;
+  }
+
   openModal('modal-client-view');
 }
 
