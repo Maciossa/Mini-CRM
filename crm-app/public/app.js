@@ -1053,3 +1053,233 @@ $('#form-action').addEventListener('submit', async e => {
 });
 
 bootstrap();
+
+
+// ---------------------------------------------------------------------
+// FAST RESEARCH (premium) + ADMIN PANEL
+// ---------------------------------------------------------------------
+let currentIsAdmin = false;
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function refreshAdminFlag() {
+  try {
+    const res = await fetch('/api/session');
+    if (!res.ok) return;
+    const data = await res.json();
+    currentIsAdmin = Boolean(data.isAdmin);
+    const btn = $('#btn-nav-admin');
+    if (btn) btn.style.display = currentIsAdmin ? 'flex' : 'none';
+  } catch (e) { /* ignore */ }
+}
+
+async function loadAdminLinks() {
+  const list = $('#admin-links-list');
+  if (!list) return;
+  try {
+    const links = await api('/admin/developer-links');
+    list.innerHTML = links.length ? links.map(l => `
+      <div class="admin-list-item" data-id="${l.id}">
+        <div>
+          <div class="name">${escapeHtml(l.label || 'Bez nazwy')}</div>
+          <div class="url">${escapeHtml(l.url)}</div>
+        </div>
+        <button class="btn-small btn-danger btn-delete-link" data-id="${l.id}">Usuń</button>
+      </div>
+    `).join('') : '<div class="admin-list-empty">Brak dodanych linków.</div>';
+    $$('.btn-delete-link').forEach(btn => btn.addEventListener('click', async () => {
+      try {
+        await api(`/admin/developer-links/${btn.dataset.id}`, { method: 'DELETE' });
+        loadAdminLinks();
+        toast('Link usunięty.');
+      } catch (err) { toast(err.message); }
+    }));
+  } catch (err) {
+    list.innerHTML = '<div class="admin-list-empty">Nie udało się wczytać linków.</div>';
+  }
+}
+
+async function loadAdminPdfs() {
+  const list = $('#admin-pdfs-list');
+  if (!list) return;
+  try {
+    const pdfs = await api('/admin/investment-pdfs');
+    list.innerHTML = pdfs.length ? pdfs.map(p => `
+      <div class="admin-list-item" data-id="${p.id}">
+        <div>
+          <div class="name">${escapeHtml(p.filename)}</div>
+          <div class="url">${p.chars.toLocaleString('pl-PL')} znaków tekstu · dodano ${new Date(p.created_at).toLocaleDateString('pl-PL')}</div>
+        </div>
+        <button class="btn-small btn-danger btn-delete-pdf" data-id="${p.id}">Usuń</button>
+      </div>
+    `).join('') : '<div class="admin-list-empty">Brak wgranych plików PDF.</div>';
+    $$('.btn-delete-pdf').forEach(btn => btn.addEventListener('click', async () => {
+      try {
+        await api(`/admin/investment-pdfs/${btn.dataset.id}`, { method: 'DELETE' });
+        loadAdminPdfs();
+        toast('Plik PDF usunięty.');
+      } catch (err) { toast(err.message); }
+    }));
+  } catch (err) {
+    list.innerHTML = '<div class="admin-list-empty">Nie udało się wczytać plików.</div>';
+  }
+}
+
+async function renderAdminPanel() {
+  await refreshAdminFlag();
+  if (!currentIsAdmin) {
+    const list = $('#admin-links-list');
+    if (list) list.innerHTML = '<div class="admin-list-empty">Brak dostępu.</div>';
+    return;
+  }
+  await Promise.all([loadAdminLinks(), loadAdminPdfs()]);
+}
+
+function renderResearchView() {
+  const select = $('#research-client-select');
+  if (!select) return;
+  select.innerHTML = clients.length
+    ? clients.map(c => `<option value="${c.id}">${escapeHtml(c.imie)} ${escapeHtml(c.nazwisko)}</option>`).join('')
+    : '<option value="">Brak klientów — dodaj klienta w Deals</option>';
+  const hint = $('#research-source-hint');
+  if (hint) hint.textContent = 'Wyszukiwanie bazuje na PDF-ach i linkach deweloperów dodanych w Admin Panelu.';
+  const results = $('#research-results');
+  if (results) results.innerHTML = '';
+
+  const prefBox = $('#research-preferences');
+  const chosen = clients.find(c => c.id === select.value);
+  if (prefBox && chosen && chosen.preferencje && !prefBox.value.trim()) {
+    prefBox.value = chosen.preferencje;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  refreshAdminFlag();
+});
+refreshAdminFlag();
+
+$$('.nav-item').forEach(btn => {
+  if (btn.dataset.view === 'admin') btn.addEventListener('click', () => renderAdminPanel());
+  if (btn.dataset.view === 'research') btn.addEventListener('click', () => renderResearchView());
+});
+
+const adminNavBtn = $('#btn-nav-admin');
+if (adminNavBtn) {
+  adminNavBtn.addEventListener('click', () => {
+    $$('.nav-item').forEach(b => b.classList.remove('active'));
+    adminNavBtn.classList.add('active');
+    $$('.view').forEach(v => v.classList.remove('active'));
+    $('#view-admin').classList.add('active');
+    renderAdminPanel();
+  });
+}
+
+const addLinkBtn = $('#btn-add-developer-link');
+if (addLinkBtn) addLinkBtn.addEventListener('click', async () => {
+  const url = $('#admin-link-url').value.trim();
+  const label = $('#admin-link-label').value.trim();
+  if (!url) { toast('Podaj adres URL.'); return; }
+  try {
+    await api('/admin/developer-links', { method: 'POST', body: JSON.stringify({ url, label }) });
+    $('#admin-link-url').value = '';
+    $('#admin-link-label').value = '';
+    loadAdminLinks();
+    toast('Link dodany.');
+  } catch (err) { toast(err.message); }
+});
+
+const pdfInput = $('#admin-pdf-input');
+if (pdfInput) pdfInput.addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    toast('Przetwarzanie PDF...');
+    const base64 = await fileToBase64(file);
+    await api('/admin/investment-pdfs', { method: 'POST', body: JSON.stringify({ filename: file.name, base64 }) });
+    loadAdminPdfs();
+    toast('PDF wgrany i przetworzony.');
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    e.target.value = '';
+  }
+});
+
+const runResearchBtn = $('#btn-run-research');
+if (runResearchBtn) runResearchBtn.addEventListener('click', async () => {
+  const clientId = $('#research-client-select').value;
+  const preferences = $('#research-preferences').value.trim();
+  if (!clientId) { toast('Wybierz klienta.'); return; }
+  if (!preferences) { toast('Wpisz preferencje klienta.'); return; }
+
+  runResearchBtn.disabled = true;
+  runResearchBtn.textContent = '⏳ Analizuję...';
+  const resultsEl = $('#research-results');
+  resultsEl.innerHTML = '';
+
+  try {
+    const data = await api('/research/run', {
+      method: 'POST',
+      body: JSON.stringify({ client_id: clientId, preferences })
+    });
+
+    if (data.needsPreferenceChange) {
+      openModal('modal-research-warning');
+    }
+
+    if (!data.results.length) {
+      resultsEl.innerHTML = '<div class="admin-list-empty">Brak jakichkolwiek dopasowań w podanych źródłach.</div>';
+    } else {
+      resultsEl.innerHTML = data.results.map((r, i) => `
+        <div class="research-result-card">
+          <span class="research-score-badge">🎯 ${r.score}% dopasowania</span>
+          <div class="research-result-meta">
+            <span>Cena: ${r.price ? Number(r.price).toLocaleString('pl-PL') + ' zł' : 'brak danych'}</span>
+            <span>Metraż: ${r.m2 ? r.m2 + ' m²' : 'brak danych'}</span>
+            <span>Pokoje: ${r.rooms ?? 'brak danych'}</span>
+            <span>Piętro: ${r.floor ?? 'brak danych'}</span>
+            <span>Źródło: ${escapeHtml(r.source || 'PDF inwestycji')}</span>
+          </div>
+          <div class="research-result-excerpt">${escapeHtml(r.excerpt)}</div>
+          <div class="research-result-actions">
+            ${r.sourceLink ? `<a class="btn btn-ghost" href="${escapeHtml(r.sourceLink)}" target="_blank" rel="noopener">🔗 Otwórz u dewelopera</a>` : ''}
+            <button class="btn btn-primary btn-download-report" data-index="${i}">⬇ Pobierz raport PDF</button>
+          </div>
+        </div>
+      `).join('');
+      $$('.btn-download-report').forEach(b => b.addEventListener('click', () => {
+        const r = data.results[Number(b.dataset.index)];
+        const blob = new Blob([Uint8Array.from(atob(r.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `raport-dopasowania-${r.score}proc.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }));
+    }
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    runResearchBtn.disabled = false;
+    runResearchBtn.textContent = '✦ Uruchom Fast Research';
+  }
+});
+
+const researchClientSelect = $('#research-client-select');
+if (researchClientSelect) researchClientSelect.addEventListener('change', () => {
+  const chosen = clients.find(c => c.id === researchClientSelect.value);
+  const prefBox = $('#research-preferences');
+  if (prefBox && chosen && chosen.preferencje) {
+    prefBox.value = chosen.preferencje;
+  }
+});
