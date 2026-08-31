@@ -43,7 +43,12 @@ const STAGES = [
 
 const RYNKI = ['pierwotny', 'wtorny'];
 
-const ADMIN_EMAILS = ['cezary5522@gmail.com', 'maciekmalicki060503@gmail.com'];
+const ADMIN_EMAILS = [
+  'cezary5522@gmail.com',
+  'maciekmalicki060503@gmail.com',
+  'm.malicki@freedom.pl',
+  'c.pelak@freedom.pl'
+];
 
 db.defaults({
   clients: [],
