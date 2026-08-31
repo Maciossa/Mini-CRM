@@ -10,14 +10,12 @@
 </head>
 <body>
 
-<!-- AUTH SCREEN: account login/register, then profile picker/create -->
 <div class="auth-screen" id="auth-screen">
   <div class="auth-card">
     <div class="auth-brand">
       <span class="brand-mark">◆</span> Mini CRM
     </div>
 
-    <!-- ACCOUNT: Login -->
     <div id="account-login">
       <p class="auth-subtitle">Zaloguj się do swojego konta, aby korzystać z CRM.</p>
       <form id="form-account-login">
@@ -35,7 +33,6 @@
       <p class="auth-switch">Nie masz konta? <button type="button" class="link-btn" id="btn-show-acc-register">Zarejestruj się</button></p>
     </div>
 
-    <!-- ACCOUNT: Register -->
     <div id="account-register" style="display:none;">
       <p class="auth-subtitle">Stwórz konto, aby uzyskać dostęp do swojego prywatnego CRM.</p>
       <form id="form-account-register">
@@ -53,7 +50,6 @@
       <p class="auth-switch">Masz już konto? <button type="button" class="link-btn" id="btn-show-acc-login">Zaloguj się</button></p>
     </div>
 
-    <!-- PROFILE: Picker (no password — account already authenticated) -->
     <div id="profile-picker" style="display:none;">
       <p class="auth-subtitle">Wybierz profil (osobne CRM), albo stwórz nowy.</p>
       <div class="profile-grid" id="profile-grid"></div>
@@ -61,7 +57,6 @@
       <p class="auth-switch"><button type="button" class="link-btn" id="btn-account-logout">Wyloguj się z konta</button></p>
     </div>
 
-    <!-- PROFILE: Create (Imię i nazwisko, Pseudonim, Rynek — no mail/password) -->
     <div id="profile-create" style="display:none;">
       <button class="auth-back" id="btn-back-from-profile-create">← Wróć</button>
       <p class="auth-subtitle">Stwórz nowy profil — osobne CRM z własnym pipeline'em.</p>
@@ -122,14 +117,18 @@
       <button class="nav-item" data-view="statistics">
         <span class="nav-icon">◈</span> Statistics
       </button>
+      <button class="nav-item nav-item-premium" data-view="research">
+        <span class="nav-icon">✦</span> <span class="premium-glow-text">Fast Research</span>
+      </button>
     </div>
+    <button class="nav-item nav-item-admin" data-view="admin" id="btn-nav-admin" style="display:none;">
+      <span class="nav-icon">🛠</span> Admin Panel
+    </button>
     <div class="sidebar-footer" id="sidebar-current-user"></div>
   </nav>
 
-  <!-- Main content -->
   <main class="content">
 
-    <!-- DEALS VIEW -->
     <section id="view-deals" class="view active">
       <header class="view-header">
         <div>
@@ -141,7 +140,7 @@
         </div>
         <button class="btn btn-primary" id="btn-new-lead">+ Nowy Lead</button>
       </header>
-      <div class="board" id="board"><!-- columns injected by JS --></div>
+      <div class="board" id="board"></div>
 
       <div class="closed-deals-panel" id="closed-deals-panel" style="display:none;">
         <div class="closed-deals-columns">
@@ -163,7 +162,6 @@
       </div>
     </section>
 
-    <!-- CONTACTS VIEW -->
     <section id="view-contacts" class="view">
       <header class="view-header">
         <div>
@@ -192,7 +190,6 @@
       </div>
     </section>
 
-    <!-- ACTIVITIES VIEW -->
     <section id="view-activities" class="view">
       <header class="view-header">
         <div>
@@ -203,7 +200,6 @@
       <div class="activities-list" id="activities-list"></div>
     </section>
 
-    <!-- CALENDAR VIEW -->
     <section id="view-calendar" class="view">
       <header class="view-header">
         <div>
@@ -224,7 +220,6 @@
       <div class="calendar-grid" id="calendar-grid"></div>
     </section>
 
-    <!-- PROFILE VIEW -->
     <section id="view-profile" class="view">
       <header class="view-header">
         <div>
@@ -259,7 +254,6 @@
       </div>
     </section>
 
-    <!-- SETTINGS VIEW -->
     <section id="view-settings" class="view">
       <header class="view-header">
         <div>
@@ -298,7 +292,6 @@
       </div>
     </section>
 
-    <!-- STATISTICS VIEW -->
     <section id="view-statistics" class="view">
       <header class="view-header">
         <div>
@@ -331,10 +324,67 @@
       <p class="stats-count" id="stats-count"></p>
     </section>
 
+    <section id="view-research" class="view">
+      <header class="view-header">
+        <div>
+          <h1><span class="premium-glow-text">Fast Research</span></h1>
+          <p class="subtitle">Automatyczne dopasowanie mieszkań z inwestycji do preferencji klienta</p>
+        </div>
+      </header>
+
+      <div class="research-panel">
+        <div class="field">
+          <label for="research-client-select">Wybierz klienta</label>
+          <select id="research-client-select"></select>
+        </div>
+        <div class="field">
+          <label for="research-preferences">Preferencje</label>
+          <textarea id="research-preferences" rows="4" placeholder="Wpisz Preferencje Klienta"></textarea>
+        </div>
+        <button class="btn btn-primary" id="btn-run-research">✦ Uruchom Fast Research</button>
+        <p class="research-hint" id="research-source-hint"></p>
+      </div>
+
+      <div id="research-results"></div>
+    </section>
+
+    <section id="view-admin" class="view">
+      <header class="view-header">
+        <div>
+          <h1>Admin Panel</h1>
+          <p class="subtitle">Źródła danych dla Fast Research: linki deweloperów i PDF z inwestycjami</p>
+        </div>
+      </header>
+
+      <div class="settings-section">
+        <h3>Linki do stron deweloperów</h3>
+        <p class="settings-hint">System pobierze treść tych stron podczas wyszukiwania dopasowań (Fast Research).</p>
+        <div class="field-row">
+          <div class="field">
+            <label for="admin-link-label">Nazwa (opcjonalnie)</label>
+            <input type="text" id="admin-link-label" placeholder="np. Osiedle Słoneczne" />
+          </div>
+          <div class="field">
+            <label for="admin-link-url">Link URL</label>
+            <input type="text" id="admin-link-url" placeholder="https://..." />
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-add-developer-link">+ Dodaj link</button>
+        <div class="admin-list" id="admin-links-list"></div>
+      </div>
+
+      <div class="settings-section">
+        <h3>PDF z listą inwestycji</h3>
+        <p class="settings-hint">Wklej (wgraj) PDF zawierający listę mieszkań / inwestycji do przeszukania.</p>
+        <label class="btn btn-ghost" for="admin-pdf-input" style="cursor:pointer;">⬆ Wgraj PDF</label>
+        <input type="file" id="admin-pdf-input" accept="application/pdf" style="display:none;" />
+        <div class="admin-list" id="admin-pdfs-list"></div>
+      </div>
+    </section>
+
   </main>
 </div>
 
-<!-- Modal: New Lead -->
 <div class="modal-overlay" id="modal-lead">
   <div class="modal">
     <div class="modal-header">
@@ -389,7 +439,6 @@
   </div>
 </div>
 
-<!-- Modal: New Action -->
 <div class="modal-overlay" id="modal-action">
   <div class="modal">
     <div class="modal-header">
@@ -422,7 +471,6 @@
   </div>
 </div>
 
-<!-- Modal: Client details -->
 <div class="modal-overlay" id="modal-client-view">
   <div class="modal modal-wide">
     <div class="modal-header">
@@ -440,7 +488,6 @@
   </div>
 </div>
 
-<!-- Modal: Meeting details (read-only, from Calendar) -->
 <div class="modal-overlay" id="modal-meeting-view">
   <div class="modal">
     <div class="modal-header">
@@ -454,7 +501,15 @@
   </div>
 </div>
 
-<!-- Modal: New / Edit meeting (Calendar) -->
+<div class="modal-overlay" id="modal-research-warning">
+  <div class="modal research-warning-modal">
+    <div class="research-warning-icon">⚠</div>
+    <h2 class="research-warning-title">Klient musi zmienić preferencje</h2>
+    <p class="research-warning-text">Nie znaleziono ofert dopasowanych w co najmniej 90% do podanych kryteriów. Poniżej propozycje alternatywne (60–89% dopasowania) — mogą wymagać kompromisu w preferencjach klienta.</p>
+    <button type="button" class="btn btn-primary" data-close="modal-research-warning">Rozumiem, pokaż alternatywy</button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-meeting">
   <div class="modal">
     <div class="modal-header">
