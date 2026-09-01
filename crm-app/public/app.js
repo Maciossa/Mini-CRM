@@ -1283,3 +1283,17 @@ if (researchClientSelect) researchClientSelect.addEventListener('change', () => 
     prefBox.value = chosen.preferencje;
   }
 });
+
+
+(function protectDataEntryModals() {
+  const PROTECTED_MODALS = ['modal-lead', 'modal-action', 'modal-meeting'];
+  PROTECTED_MODALS.forEach(id => {
+    const overlay = document.getElementById(id);
+    if (!overlay) return;
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) {
+        e.stopImmediatePropagation();
+      }
+    }, true);
+  });
+})();
