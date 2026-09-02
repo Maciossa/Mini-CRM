@@ -1011,3 +1011,52 @@ html[data-theme="dark"] .settings-banner { background: #3A2F12; border-color: #6
 html[data-theme="dark"] .stage-pill { color: #fff; }
 html[data-theme="dark"] .avatar { color: #fff; }
 html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #3A4256; }
+
+.planner-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.planner-scopes, .planner-modes { display: flex; gap: 6px; background: #EEF0F5; padding: 4px; border-radius: 10px; }
+.planner-scope, .planner-mode { border: none; background: transparent; color: var(--text-muted); padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.planner-scope.active, .planner-mode.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.planner-daynav { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.planner-day-label { font-weight: 700; font-size: 15px; min-width: 240px; }
+.planner-calendar { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; max-width: 900px; }
+.hour-grid { max-height: 620px; overflow-y: auto; }
+.hour-row { display: flex; border-bottom: 1px solid var(--border); min-height: 46px; }
+.hour-label { width: 62px; flex-shrink: 0; padding: 8px 10px; font-size: 11.5px; color: var(--text-muted); font-weight: 600; border-right: 1px solid var(--border); }
+.hour-slot { flex: 1; padding: 5px 8px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.hour-slot:hover { background: rgba(201,150,46,0.06); }
+.task-chip { display: flex; align-items: center; gap: 8px; background: rgba(59,130,246,0.10); border-left: 3px solid var(--stage-1); border-radius: 6px; padding: 6px 9px; font-size: 12.5px; }
+.task-chip.done { opacity: .55; }
+.task-chip.done .task-chip-title { text-decoration: line-through; }
+.task-chip-time { font-weight: 700; color: var(--text-muted); font-size: 11.5px; }
+.task-chip-title { font-weight: 600; flex: 1; }
+.task-repeat { color: var(--gold-dark); font-weight: 700; }
+.task-chip .task-edit, .task-row .task-edit { border: none; background: transparent; cursor: pointer; color: var(--text-muted); font-size: 13px; padding: 2px 4px; }
+.untimed-box { padding: 12px 14px; border-bottom: 2px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.untimed-title { font-size: 11.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.planner-list { max-width: 900px; display: flex; flex-direction: column; gap: 8px; }
+.task-row { display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: 10px; box-shadow: var(--shadow); padding: 12px 16px; }
+.task-row.done { opacity: .6; }
+.task-row.done .task-row-title { text-decoration: line-through; }
+.task-row-main { flex: 1; }
+.task-row-title { font-weight: 600; font-size: 13.5px; }
+.task-row-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.goal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; padding: 16px; }
+.goal-card { background: #F7F8FB; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.goal-card.done { opacity: .6; }
+.goal-check { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.goal-title { font-weight: 600; font-size: 13.5px; }
+.goal-card.done .goal-title { text-decoration: line-through; }
+.goal-notes { font-size: 12px; color: var(--text-muted); }
+.weekday-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+.weekday-opt { display: flex; align-items: center; gap: 5px; background: #F0F1F5; border-radius: 7px; padding: 6px 10px; font-size: 12.5px; cursor: pointer; }
+.settings-accordion { padding: 0; overflow: hidden; }
+.settings-acc-head { width: 100%; display: flex; align-items: center; justify-content: space-between; background: transparent; border: none; cursor: pointer; padding: 16px 20px; font-size: 14.5px; font-weight: 700; color: var(--text); text-align: left; }
+.settings-acc-head:hover { background: #F7F8FB; }
+.settings-acc-arrow { color: var(--text-muted); transition: transform .18s; }
+.settings-acc-head.open .settings-acc-arrow { transform: rotate(180deg); }
+.settings-acc-body { padding: 0 20px 18px 20px; }
+html[data-theme="dark"] .planner-scopes { background: #232939; }
+html[data-theme="dark"] .planner-modes { background: #232939; }
+html[data-theme="dark"] .goal-card { background: #232939; }
+html[data-theme="dark"] .weekday-opt { background: #232939; }
+html[data-theme="dark"] .settings-acc-head:hover { background: #232939; }
