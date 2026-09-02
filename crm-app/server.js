@@ -30,16 +30,50 @@ if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
 const adapter = new FileSync(DB_FILE);
 const db = low(adapter);
 
+const BACKUP_DIR = path.join(DB_DIR, 'backups');
+const MAX_BACKUPS = 30;
+const BACKUP_INTERVAL_MS = 10 * 60 * 1000;
+if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+
+let lastBackupSignature = null;
+
+function writeSnapshot(reason) {
+  try {
+    if (!fs.existsSync(DB_FILE)) return;
+    const raw = fs.readFileSync(DB_FILE, 'utf8');
+    if (!raw || raw.length < 2) return;
+    const signature = crypto.createHash('sha1').update(raw).digest('hex');
+    if (signature === lastBackupSignature) return;
+    JSON.parse(raw);
+    lastBackupSignature = signature;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    fs.writeFileSync(path.join(BACKUP_DIR, 'db-' + stamp + '-' + reason + '.json'), raw);
+    const files = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith('db-')).sort();
+    while (files.length > MAX_BACKUPS) {
+      const oldest = files.shift();
+      try { fs.unlinkSync(path.join(BACKUP_DIR, oldest)); } catch (e) { }
+    }
+  } catch (e) {
+    console.error('Backup snapshot failed:', e.message);
+  }
+}
+
+setInterval(() => writeSnapshot('auto'), BACKUP_INTERVAL_MS).unref();
+['SIGTERM', 'SIGINT'].forEach(sig => process.on(sig, () => {
+  writeSnapshot('shutdown');
+  process.exit(0);
+}));
+
 const STAGES = [
   'Nowy Lead',
   'Do oddzwonienia',
-  'Spotkanie Umówione',
+  'Spotkanie Umowione',
   'Follow up (Po prezentacji)',
   'Rezerwacja Ustna',
-  'Rezerwacja Wstępna (1%)',
-  'Sprzedaż',
+  'Rezerwacja Wstepna (1%)',
+  'Sprzedaz',
   'Stary Lead'
-];
+  ];
 
 const RYNKI = ['pierwotny', 'wtorny'];
 
@@ -48,7 +82,7 @@ const ADMIN_EMAILS = [
   'maciekmalicki060503@gmail.com',
   'm.malicki@freedom.pl',
   'c.pelak@freedom.pl'
-];
+  ];
 
 db.defaults({
   clients: [],
@@ -65,6 +99,7 @@ if (!db.get('meta.jwtSecret').value()) {
   db.set('meta.jwtSecret', crypto.randomBytes(48).toString('hex')).write();
 }
 const JWT_SECRET = db.get('meta.jwtSecret').value();
+writeSnapshot('boot');
 const COOKIE_NAME = 'crm_token';
 const TOKEN_TTL = '30d';
 
@@ -88,7 +123,9 @@ function publicProfile(p) {
     imie_nazwisko: p.imie_nazwisko,
     pseudonim: p.pseudonim,
     rynek: p.rynek,
-    prowizja_agenta: p.prowizja_agenta || 50
+    prowizja_agenta: p.prowizja_agenta || 50,
+    stages: (Array.isArray(p.stages) && p.stages.length === STAGES.length) ? p.stages : STAGES,
+    theme: p.theme === 'dark' ? 'dark' : 'light'
   };
 }
 
@@ -113,18 +150,18 @@ function readToken(req) {
 
 function requireAccount(req, res, next) {
   const payload = readToken(req);
-  if (!payload) return res.status(401).json({ error: 'Musisz się zalogować.' });
+  if (!payload) return res.status(401).json({ error: 'Musisz sie zalogowac.' });
   const account = db.get('accounts').find({ id: payload.accountId }).value();
-  if (!account) return res.status(401).json({ error: 'Konto nie istnieje. Zaloguj się ponownie.' });
+  if (!account) return res.status(401).json({ error: 'Konto nie istnieje. Zaloguj sie ponownie.' });
   req.accountId = account.id;
   next();
 }
 
 function requireProfile(req, res, next) {
   const payload = readToken(req);
-  if (!payload) return res.status(401).json({ error: 'Musisz się zalogować.' });
+  if (!payload) return res.status(401).json({ error: 'Musisz sie zalogowac.' });
   const account = db.get('accounts').find({ id: payload.accountId }).value();
-  if (!account) return res.status(401).json({ error: 'Konto nie istnieje. Zaloguj się ponownie.' });
+  if (!account) return res.status(401).json({ error: 'Konto nie istnieje. Zaloguj sie ponownie.' });
   if (!payload.profileId) return res.status(401).json({ error: 'Wybierz profil.' });
   const profile = db.get('profiles').find({ id: payload.profileId, account_id: account.id }).value();
   if (!profile) return res.status(401).json({ error: 'Nie znaleziono profilu.' });
@@ -136,7 +173,7 @@ function requireProfile(req, res, next) {
 function requireAdmin(req, res, next) {
   const account = db.get('accounts').find({ id: req.accountId }).value();
   if (!account || !ADMIN_EMAILS.includes(account.mail)) {
-    return res.status(403).json({ error: 'Brak dostępu do Admin Panelu.' });
+    return res.status(403).json({ error: 'Brak dostepu do Admin Panelu.' });
   }
   next();
 }
@@ -144,15 +181,14 @@ function requireAdmin(req, res, next) {
 app.post('/api/account/register', async (req, res) => {
   const { mail, password } = req.body;
   if (!mail || !password) {
-    return res.status(400).json({ error: 'Mail i hasło są wymagane.' });
+    return res.status(400).json({ error: 'Mail i haslo sa wymagane.' });
   }
   if (String(password).length < 6) {
-    return res.status(400).json({ error: 'Hasło musi mieć co najmniej 6 znaków.' });
+    return res.status(400).json({ error: 'Haslo musi miec co najmniej 6 znakow.' });
   }
   const mailNorm = String(mail).trim().toLowerCase();
   const taken = db.get('accounts').find(a => a.mail.toLowerCase() === mailNorm).value();
-  if (taken) return res.status(409).json({ error: 'Konto z tym adresem mail już istnieje.' });
-
+  if (taken) return res.status(409).json({ error: 'Konto z tym adresem mail juz istnieje.' });
   const password_hash = await bcrypt.hash(String(password), 10);
   const account = { id: uuidv4(), mail: mailNorm, password_hash, created_at: now() };
   db.get('accounts').push(account).write();
@@ -163,15 +199,13 @@ app.post('/api/account/register', async (req, res) => {
 app.post('/api/account/login', async (req, res) => {
   const { mail, password } = req.body;
   if (!mail || !password) {
-    return res.status(400).json({ error: 'Mail i hasło są wymagane.' });
+    return res.status(400).json({ error: 'Mail i haslo sa wymagane.' });
   }
   const mailNorm = String(mail).trim().toLowerCase();
   const account = db.get('accounts').find(a => a.mail.toLowerCase() === mailNorm).value();
-  if (!account) return res.status(401).json({ error: 'Nieprawidłowy mail lub hasło.' });
-
+  if (!account) return res.status(401).json({ error: 'Nieprawidlowy mail lub haslo.' });
   const ok = await bcrypt.compare(String(password), account.password_hash);
-  if (!ok) return res.status(401).json({ error: 'Nieprawidłowy mail lub hasło.' });
-
+  if (!ok) return res.status(401).json({ error: 'Nieprawidlowy mail lub haslo.' });
   issueSession(res, { accountId: account.id });
   res.json(publicAccount(account));
 });
@@ -198,27 +232,26 @@ app.get('/api/profiles/markets', (req, res) => {
 
 app.get('/api/profiles', requireAccount, (req, res) => {
   const list = db.get('profiles')
-    .filter({ account_id: req.accountId })
-    .map(publicProfile)
-    .value()
-    .sort((a, b) => a.pseudonim.localeCompare(b.pseudonim, 'pl'));
+  .filter({ account_id: req.accountId })
+  .map(publicProfile)
+  .value()
+  .sort((a, b) => a.pseudonim.localeCompare(b.pseudonim, 'pl'));
   res.json(list);
 });
 
 app.post('/api/profiles', requireAccount, (req, res) => {
   const { imie_nazwisko, pseudonim, rynek } = req.body;
   if (!imie_nazwisko || !pseudonim || !rynek) {
-    return res.status(400).json({ error: 'Imię i nazwisko, pseudonim oraz rynek są wymagane.' });
+    return res.status(400).json({ error: 'Imie i nazwisko, pseudonim oraz rynek sa wymagane.' });
   }
   if (!RYNKI.includes(rynek)) {
-    return res.status(400).json({ error: 'Nieprawidłowy rynek.' });
+    return res.status(400).json({ error: 'Nieprawidlowy rynek.' });
   }
   const pseudonimNorm = String(pseudonim).trim();
   const taken = db.get('profiles')
-    .find(p => p.account_id === req.accountId && p.pseudonim.toLowerCase() === pseudonimNorm.toLowerCase())
-    .value();
-  if (taken) return res.status(409).json({ error: 'Masz już profil z tym pseudonimem.' });
-
+  .find(p => p.account_id === req.accountId && p.pseudonim.toLowerCase() === pseudonimNorm.toLowerCase())
+  .value();
+  if (taken) return res.status(409).json({ error: 'Masz juz profil z tym pseudonimem.' });
   const profile = {
     id: uuidv4(),
     account_id: req.accountId,
@@ -247,12 +280,45 @@ app.get('/api/profiles/me', requireProfile, (req, res) => {
 
 const ALLOWED_SPLITS = [45, 50, 55, 60];
 app.put('/api/profiles/me/settings', requireProfile, (req, res) => {
-  const { prowizja_agenta } = req.body;
-  const val = Number(prowizja_agenta);
-  if (!ALLOWED_SPLITS.includes(val)) {
-    return res.status(400).json({ error: 'Podział prowizji musi wynosić 45%, 50%, 55% lub 60%.' });
+  const { prowizja_agenta, stages, theme } = req.body;
+  const updates = {};
+  if (prowizja_agenta !== undefined) {
+    const val = Number(prowizja_agenta);
+    if (!ALLOWED_SPLITS.includes(val)) {
+      return res.status(400).json({ error: 'Podzial prowizji musi wynosic 45%, 50%, 55% lub 60%.' });
+    }
+    updates.prowizja_agenta = val;
   }
-  db.get('profiles').find({ id: req.profileId }).assign({ prowizja_agenta: val }).write();
+  if (stages !== undefined) {
+    if (!Array.isArray(stages) || stages.length !== STAGES.length) {
+      return res.status(400).json({ error: 'Lista etapow musi zawierac dokladnie ' + STAGES.length + ' pozycji.' });
+    }
+    const cleaned = stages.map(s => String(s || '').trim());
+    if (cleaned.some(s => !s)) {
+      return res.status(400).json({ error: 'Nazwy etapow nie moga byc puste.' });
+    }
+    if (new Set(cleaned.map(s => s.toLowerCase())).size !== cleaned.length) {
+      return res.status(400).json({ error: 'Nazwy etapow musza byc unikalne.' });
+    }
+    const profile = db.get('profiles').find({ id: req.profileId }).value();
+    const oldStages = (Array.isArray(profile.stages) && profile.stages.length === STAGES.length) ? profile.stages : STAGES;
+    oldStages.forEach((oldName, i) => {
+      if (oldName !== cleaned[i]) {
+        db.get('clients')
+        .filter({ profile_id: req.profileId, stage: oldName })
+        .each(c => { c.stage = cleaned[i]; })
+        .write();
+      }
+    });
+    updates.stages = cleaned;
+  }
+  if (theme !== undefined) {
+    if (!['light', 'dark'].includes(theme)) {
+      return res.status(400).json({ error: 'Nieprawidlowy motyw.' });
+    }
+    updates.theme = theme;
+  }
+  db.get('profiles').find({ id: req.profileId }).assign(updates).write();
   res.json(publicProfile(db.get('profiles').find({ id: req.profileId }).value()));
 });
 
@@ -261,6 +327,13 @@ app.get('/api/system/status', (req, res) => {
 });
 
 app.get('/api/stages', (req, res) => {
+  const payload = readToken(req);
+  if (payload && payload.profileId) {
+    const p = db.get('profiles').find({ id: payload.profileId }).value();
+    if (p && Array.isArray(p.stages) && p.stages.length === STAGES.length) {
+      return res.json(p.stages);
+    }
+  }
   res.json(STAGES);
 });
 
@@ -275,8 +348,10 @@ app.get('/api/clients', (req, res) => {
 app.post('/api/clients', (req, res) => {
   const { imie, nazwisko, mail, telefon, preferencje, stage, inwestycja, cena_nieruchomosci, prowizja_procent } = req.body;
   if (!imie || !nazwisko) {
-    return res.status(400).json({ error: 'Imię i nazwisko są wymagane.' });
+    return res.status(400).json({ error: 'Imie i nazwisko sa wymagane.' });
   }
+  const prof = db.get('profiles').find({ id: req.profileId }).value();
+  const activeStages = (prof && Array.isArray(prof.stages) && prof.stages.length === STAGES.length) ? prof.stages : STAGES;
   const client = {
     id: uuidv4(),
     profile_id: req.profileId,
@@ -288,8 +363,11 @@ app.post('/api/clients', (req, res) => {
     inwestycja: inwestycja || '',
     cena_nieruchomosci: cena_nieruchomosci !== undefined && cena_nieruchomosci !== '' ? Number(cena_nieruchomosci) : null,
     prowizja_procent: prowizja_procent !== undefined && prowizja_procent !== '' ? Number(prowizja_procent) : null,
-    stage: STAGES.includes(stage) ? stage : STAGES[0],
+    stage: activeStages.includes(stage) ? stage : activeStages[0],
     deal_status: null,
+    deal_month: null,
+    deal_split: null,
+    closed_at: null,
     created_at: now(),
     updated_at: now()
   };
@@ -300,17 +378,49 @@ app.post('/api/clients', (req, res) => {
 app.put('/api/clients/:id', (req, res) => {
   const client = db.get('clients').find({ id: req.params.id, profile_id: req.profileId }).value();
   if (!client) return res.status(404).json({ error: 'Nie znaleziono klienta.' });
-
-  const allowed = ['imie', 'nazwisko', 'mail', 'telefon', 'preferencje', 'stage', 'inwestycja', 'cena_nieruchomosci', 'prowizja_procent', 'deal_status'];
+  const allowed = ['imie', 'nazwisko', 'mail', 'telefon', 'preferencje', 'stage', 'inwestycja', 'cena_nieruchomosci', 'prowizja_procent', 'deal_status', 'deal_month', 'deal_split'];
   const updates = {};
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
-  if (updates.stage && !STAGES.includes(updates.stage)) {
-    return res.status(400).json({ error: 'Nieprawidłowy etap.' });
+  const profileForStages = db.get('profiles').find({ id: req.profileId }).value();
+  const activeStages = (profileForStages && Array.isArray(profileForStages.stages) && profileForStages.stages.length === STAGES.length) ? profileForStages.stages : STAGES;
+  if (updates.stage && !activeStages.includes(updates.stage)) {
+    return res.status(400).json({ error: 'Nieprawidlowy etap.' });
   }
   if (updates.deal_status !== undefined && ![null, 'won', 'lost'].includes(updates.deal_status)) {
-    return res.status(400).json({ error: 'Nieprawidłowy status transakcji.' });
+    return res.status(400).json({ error: 'Nieprawidlowy status transakcji.' });
+  }
+  if (updates.deal_month !== undefined) {
+    if (updates.deal_month === '' || updates.deal_month === null) updates.deal_month = null;
+    else {
+      const m = Number(updates.deal_month);
+      if (!Number.isInteger(m) || m < 1 || m > 12) {
+        return res.status(400).json({ error: 'Miesiac transakcji musi byc liczba 1-12.' });
+      }
+      updates.deal_month = m;
+    }
+  }
+  if (updates.deal_split !== undefined) {
+    if (updates.deal_split === '' || updates.deal_split === null) updates.deal_split = null;
+    else {
+      const s = Number(updates.deal_split);
+      if (!ALLOWED_SPLITS.includes(s)) {
+        return res.status(400).json({ error: 'Podzial prowizji musi wynosic 45%, 50%, 55% lub 60%.' });
+      }
+      updates.deal_split = s;
+    }
+  }
+  if (updates.deal_status !== undefined) {
+    if (updates.deal_status && !client.closed_at) {
+      updates.closed_at = now();
+      if (updates.deal_month === undefined && !client.deal_month) {
+        updates.deal_month = new Date().getMonth() + 1;
+      }
+    }
+    if (updates.deal_status === null) {
+      updates.closed_at = null;
+    }
   }
   if (updates.cena_nieruchomosci !== undefined) {
     updates.cena_nieruchomosci = updates.cena_nieruchomosci === '' ? null : Number(updates.cena_nieruchomosci);
@@ -319,12 +429,12 @@ app.put('/api/clients/:id', (req, res) => {
     updates.prowizja_procent = updates.prowizja_procent === '' ? null : Number(updates.prowizja_procent);
   }
   updates.updated_at = now();
-
   db.get('clients').find({ id: req.params.id, profile_id: req.profileId }).assign(updates).write();
   res.json(db.get('clients').find({ id: req.params.id, profile_id: req.profileId }).value());
 });
 
 app.delete('/api/clients/:id', (req, res) => {
+  writeSnapshot('pre-delete');
   db.get('clients').remove({ id: req.params.id, profile_id: req.profileId }).write();
   db.get('activities').remove({ client_id: req.params.id, profile_id: req.profileId }).write();
   res.status(204).end();
@@ -336,7 +446,7 @@ app.get('/api/activities', (req, res) => {
     const client = clients.find(c => c.id === a.client_id);
     return {
       ...a,
-      client_name: client ? `${client.imie} ${client.nazwisko}` : '(usunięty klient)',
+      client_name: client ? client.imie + ' ' + client.nazwisko : '(usuniety klient)',
       client_phone: client ? client.telefon : '',
       client_mail: client ? client.mail : '',
       client_preferencje: client ? client.preferencje : ''
@@ -348,11 +458,10 @@ app.get('/api/activities', (req, res) => {
 app.post('/api/activities', (req, res) => {
   const { client_id, action_name, date, notes, time } = req.body;
   if (!client_id || !action_name || !date) {
-    return res.status(400).json({ error: 'client_id, action_name i date są wymagane.' });
+    return res.status(400).json({ error: 'client_id, action_name i date sa wymagane.' });
   }
   const client = db.get('clients').find({ id: client_id, profile_id: req.profileId }).value();
   if (!client) return res.status(404).json({ error: 'Nie znaleziono klienta.' });
-
   const activity = {
     id: uuidv4(),
     profile_id: req.profileId,
@@ -371,7 +480,6 @@ app.post('/api/activities', (req, res) => {
 app.put('/api/activities/:id', (req, res) => {
   const activity = db.get('activities').find({ id: req.params.id, profile_id: req.profileId }).value();
   if (!activity) return res.status(404).json({ error: 'Nie znaleziono akcji.' });
-
   const allowed = ['action_name', 'date', 'time', 'notes', 'done', 'client_id'];
   const updates = {};
   for (const key of allowed) {
@@ -400,9 +508,9 @@ app.get('/api/backup/export', (req, res) => {
 app.post('/api/backup/import', (req, res) => {
   const { clients: importedClients, activities: importedActivities } = req.body;
   if (!Array.isArray(importedClients) || !Array.isArray(importedActivities)) {
-    return res.status(400).json({ error: 'Nieprawidłowy plik kopii zapasowej.' });
+    return res.status(400).json({ error: 'Nieprawidlowy plik kopii zapasowej.' });
   }
-
+  writeSnapshot('pre-import');
   const idMap = {};
   const newClients = importedClients.map(c => {
     const newId = uuidv4();
@@ -415,11 +523,44 @@ app.post('/api/backup/import', (req, res) => {
     profile_id: req.profileId,
     client_id: idMap[a.client_id] || a.client_id
   })).filter(a => newClients.some(c => c.id === a.client_id));
-
   db.get('clients').push(...newClients).write();
   db.get('activities').push(...newActivities).write();
-
   res.json({ imported_clients: newClients.length, imported_activities: newActivities.length });
+});
+
+app.get('/api/backup/snapshots', (req, res) => {
+  try {
+    const files = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith('db-')).sort().reverse();
+    res.json(files.slice(0, MAX_BACKUPS).map(f => {
+      const stat = fs.statSync(path.join(BACKUP_DIR, f));
+      return { file: f, size: stat.size, created_at: stat.mtime.toISOString() };
+    }));
+  } catch (e) {
+    res.json([]);
+  }
+});
+
+app.post('/api/backup/snapshots/:file/restore', (req, res) => {
+  const file = path.basename(String(req.params.file));
+  if (!file.startsWith('db-') || !file.endsWith('.json')) {
+    return res.status(400).json({ error: 'Nieprawidlowa nazwa kopii.' });
+  }
+  const full = path.join(BACKUP_DIR, file);
+  if (!fs.existsSync(full)) return res.status(404).json({ error: 'Nie znaleziono kopii.' });
+  try {
+    const raw = fs.readFileSync(full, 'utf8');
+    const parsed = JSON.parse(raw);
+    const mine = (parsed.clients || []).filter(c => c.profile_id === req.profileId);
+    const myActs = (parsed.activities || []).filter(a => a.profile_id === req.profileId);
+    writeSnapshot('pre-restore');
+    db.get('clients').remove({ profile_id: req.profileId }).write();
+    db.get('activities').remove({ profile_id: req.profileId }).write();
+    if (mine.length) db.get('clients').push(...mine).write();
+    if (myActs.length) db.get('activities').push(...myActs).write();
+    res.json({ restored_clients: mine.length, restored_activities: myActs.length });
+  } catch (e) {
+    res.status(500).json({ error: 'Nie udalo sie przywrocic kopii: ' + e.message });
+  }
 });
 
 app.use('/api/admin', requireProfile, requireAdmin);
@@ -450,8 +591,8 @@ app.delete('/api/admin/developer-links/:id', (req, res) => {
 
 app.get('/api/admin/investment-pdfs', (req, res) => {
   const list = db.get('investmentPdfs').filter({ profile_id: req.profileId })
-    .map(p => ({ id: p.id, filename: p.filename, created_at: p.created_at, chars: (p.text || '').length }))
-    .value();
+  .map(p => ({ id: p.id, filename: p.filename, created_at: p.created_at, chars: (p.text || '').length }))
+  .value();
   res.json(list);
 });
 
@@ -471,7 +612,7 @@ app.post('/api/admin/investment-pdfs', async (req, res) => {
     db.get('investmentPdfs').push(record).write();
     res.status(201).json({ id: record.id, filename: record.filename, created_at: record.created_at, chars: record.text.length });
   } catch (e) {
-    res.status(400).json({ error: 'Nie udało się odczytać PDF-a. Upewnij się, że to poprawny plik PDF.' });
+    res.status(400).json({ error: 'Nie udalo sie odczytac PDF-a. Upewnij sie, ze to poprawny plik PDF.' });
   }
 });
 
@@ -482,19 +623,19 @@ app.delete('/api/admin/investment-pdfs/:id', (req, res) => {
 
 function stripHtml(html) {
   return String(html)
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+  .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/&nbsp;/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
 }
 
 async function fetchDeveloperPageText(url) {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
-    const resp = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MiniCRM-FastResearch/1.0)' } });
+    const resp = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CRM-FastResearch/1.0)' } });
     clearTimeout(timeout);
     if (!resp.ok) return '';
     const html = await resp.text();
@@ -511,10 +652,10 @@ function parseListingsFromText(text, sourceLabel, sourceLink) {
   for (const raw of chunks) {
     const chunk = raw.trim();
     if (chunk.length < 20) continue;
-    const priceMatch = chunk.match(/([\d][\d\s.,]{3,})\s*(?:z[łl]|PLN)\b/i);
-    const m2Match = chunk.match(/(\d{2,3}(?:[.,]\d{1,2})?)\s*m(?:2|²)/i);
-    const roomsMatch = chunk.match(/(\d)\s*(?:pok(?:ój|oje|oi|ojowe)?)/i);
-    const floorMatch = chunk.match(/(parter|\d{1,2})\s*(?:piętro|pietro|p\.)/i);
+    const priceMatch = chunk.match(/([\d][\d\s.,]{3,})\s*(?:z[al]|PLN)\b/i);
+    const m2Match = chunk.match(/(\d{2,3}(?:[.,]\d{1,2})?)\s*m(?:2)/i);
+    const roomsMatch = chunk.match(/(\d)\s*(?:pok)/i);
+    const floorMatch = chunk.match(/(parter|\d{1,2})\s*(?:pietro|p\.)/i);
     const fieldCount = [priceMatch, m2Match, roomsMatch].filter(Boolean).length;
     if (fieldCount < 2) continue;
     listings.push({
@@ -531,21 +672,15 @@ function parseListingsFromText(text, sourceLabel, sourceLink) {
   return listings;
 }
 
-const PREFERENCE_STOPWORDS = new Set([
-  'szukam', 'szukamy', 'mieszkania', 'mieszkanie', 'klient', 'klienta', 'preferuje',
-  'preferencje', 'chcialby', 'chcialaby', 'chce', 'chcemy', 'najlepiej', 'ewentualnie',
-  'oraz', 'lub', 'okolo', 'budzet', 'budzetu', 'cena', 'ceny', 'zeby', 'ktore', 'ktora',
-  'jest', 'tak', 'nie', 'bardzo', 'raczej', 'jakies', 'jakis', 'moze', 'mozliwie'
-]);
+const PREFERENCE_STOPWORDS = new Set(['szukam','szukamy','mieszkania','mieszkanie','klient','klienta','preferuje','preferencje','chce','chcemy','najlepiej','ewentualnie','oraz','lub','okolo','budzet','budzetu','cena','ceny','zeby','ktore','ktora','jest','tak','nie','bardzo','raczej','moze']);
 
 function extractPreferenceCriteria(prefText) {
   const t = prefText.toLowerCase();
-  const rooms = t.match(/(\d)\s*(?:pok(?:ój|oje|oi|ojowe|ojowy|ojowego)?)/);
-  const maxPriceMatch = t.match(/(?:do|max|maks\w*|bud[żz]et[a-z]*)\D{0,10}([\d][\d\s.,]{3,})\s*(?:z[łl]|pln|tys)/);
-  const m2RangeMatch = t.match(/(\d{2,3})\s*(?:-|do)\s*(\d{2,3})\s*m(?:2|²)/);
-  const m2SingleMatch = t.match(/(\d{2,3})\s*m(?:2|²)/);
-  const words = t.split(/[^a-ząćęłńóśźż0-9]+/i)
-    .filter(w => w.length > 3 && !/^\d+$/.test(w) && !PREFERENCE_STOPWORDS.has(w));
+  const rooms = t.match(/(\d)\s*(?:pok)/);
+  const maxPriceMatch = t.match(/(?:do|max|maks\w*|budzet[a-z]*)\D{0,10}([\d][\d\s.,]{3,})\s*(?:zl|pln|tys)/);
+  const m2RangeMatch = t.match(/(\d{2,3})\s*(?:-|do)\s*(\d{2,3})\s*m2/);
+  const m2SingleMatch = t.match(/(\d{2,3})\s*m2/);
+  const words = t.split(/[^a-z0-9]+/i).filter(w => w.length > 3 && !/^\d+$/.test(w) && !PREFERENCE_STOPWORDS.has(w));
   return {
     rooms: rooms ? Number(rooms[1]) : null,
     maxPrice: maxPriceMatch ? Number(maxPriceMatch[1].replace(/[^\d]/g, '')) * (/tys/.test(maxPriceMatch[0]) ? 1000 : 1) : null,
@@ -555,10 +690,9 @@ function extractPreferenceCriteria(prefText) {
   };
 }
 
-function scoreListing(listing, criteria, prefTextLower) {
+function scoreListing(listing, criteria) {
   let score = 0;
   let maxScore = 0;
-
   maxScore += 30;
   if (criteria.rooms != null && listing.rooms != null) {
     if (listing.rooms === criteria.rooms) score += 30;
@@ -566,7 +700,6 @@ function scoreListing(listing, criteria, prefTextLower) {
   } else if (criteria.rooms == null) {
     score += 15;
   }
-
   maxScore += 25;
   if (criteria.m2Min != null && listing.m2 != null) {
     if (listing.m2 >= criteria.m2Min && listing.m2 <= criteria.m2Max) score += 25;
@@ -577,7 +710,6 @@ function scoreListing(listing, criteria, prefTextLower) {
   } else if (criteria.m2Min == null) {
     score += 12;
   }
-
   maxScore += 25;
   if (criteria.maxPrice != null && listing.price != null) {
     if (listing.price <= criteria.maxPrice) score += 25;
@@ -585,7 +717,6 @@ function scoreListing(listing, criteria, prefTextLower) {
   } else if (criteria.maxPrice == null) {
     score += 12;
   }
-
   maxScore += 20;
   if (criteria.words.length) {
     const raw = listing.raw.toLowerCase();
@@ -594,19 +725,18 @@ function scoreListing(listing, criteria, prefTextLower) {
   } else {
     score += 20;
   }
-
   return Math.round((score / maxScore) * 100);
 }
 
 const PROS_CONS_DICTIONARY = [
-  { keyword: /metro|tramwaj|autobus|komunikacj/i, pro: 'Dobra dostępność komunikacji miejskiej (wg opisu).' },
-  { keyword: /balkon|taras|ogr[óo]dek/i, pro: 'Dodatkowa przestrzeń zewnętrzna (balkon/taras/ogródek).' },
-  { keyword: /winda/i, pro: 'Budynek wyposażony w windę.' },
-  { keyword: /garaż|miejsce postojowe|parking/i, pro: 'Zapewnione miejsce parkingowe/garaż.' },
-  { keyword: /parter/i, con: 'Lokal na parterze — może wiązać się z mniejszą prywatnością.' },
+  { keyword: /metro|tramwaj|autobus|komunikacj/i, pro: 'Dobra dostepnosc komunikacji miejskiej (wg opisu).' },
+  { keyword: /balkon|taras|ogrodek/i, pro: 'Dodatkowa przestrzen zewnetrzna (balkon/taras/ogrodek).' },
+  { keyword: /winda/i, pro: 'Budynek wyposazony w winde.' },
+  { keyword: /garaz|miejsce postojowe|parking/i, pro: 'Zapewnione miejsce parkingowe/garaz.' },
+  { keyword: /parter/i, con: 'Lokal na parterze - mniejsza prywatnosc.' },
   { keyword: /bez windy/i, con: 'Budynek bez windy.' },
-  { keyword: /do remontu|stan deweloperski surowy/i, con: 'Lokal wymaga dodatkowych nakładów wykończeniowych.' }
-];
+  { keyword: /do remontu/i, con: 'Lokal wymaga dodatkowych nakladow wykonczeniowych.' }
+  ];
 
 function buildProsAndCons(listing) {
   const pros = [];
@@ -617,16 +747,16 @@ function buildProsAndCons(listing) {
       if (rule.con) cons.push(rule.con);
     }
   }
-  if (!pros.length) pros.push('Brak wystarczających danych w opisie, by wskazać dodatkowe zalety — zalecana wizja lokalna.');
-  if (!cons.length) cons.push('Brak wykrytych istotnych wad na podstawie opisu — zalecana weryfikacja na miejscu.');
+  if (!pros.length) pros.push('Brak wystarczajacych danych w opisie - zalecana wizja lokalna.');
+  if (!cons.length) cons.push('Brak wykrytych istotnych wad na podstawie opisu - zalecana weryfikacja na miejscu.');
   return { pros, cons };
 }
 
-async function buildWalkingDistanceSection(listing) {
+async function buildWalkingDistanceSection() {
   if (process.env.GOOGLE_MAPS_API_KEY) {
-    return 'Klucz Google Maps API wykryty, ale integracja czasu dojścia pieszo nie jest jeszcze podłączona w tej wersji — skontaktuj się, aby ją aktywować.';
+    return 'Klucz Google Maps API wykryty, ale integracja czasu dojscia pieszo nie jest jeszcze podlaczona w tej wersji.';
   }
-  return 'Brak klucza GOOGLE_MAPS_API_KEY w konfiguracji serwera — dokładny czas dojścia pieszo do komunikacji nie mógł zostać wyliczony automatycznie. Dodaj ten klucz jako zmienną środowiskową na Render, aby włączyć tę analizę.';
+  return 'Brak klucza GOOGLE_MAPS_API_KEY w konfiguracji serwera - dokladny czas dojscia pieszo do komunikacji nie mogl zostac wyliczony automatycznie. Dodaj ten klucz jako zmienna srodowiskowa na Render, aby wlaczyc te analize.';
 }
 
 function estimateRent(price) {
@@ -641,63 +771,46 @@ async function buildReportPdfBuffer({ client, listing, score }) {
       const chunks = [];
       doc.on('data', c => chunks.push(c));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
-
       const { pros, cons } = buildProsAndCons(listing);
-      const walkingSection = await buildWalkingDistanceSection(listing);
+      const walkingSection = await buildWalkingDistanceSection();
       const rent = estimateRent(listing.price);
-
       doc.fontSize(18).text('Raport dopasowania nieruchomosci', { underline: true });
       doc.moveDown(0.5);
-      doc.fontSize(11).fillColor('#555').text(`Wygenerowano: ${new Date().toLocaleString('pl-PL')}`);
-      doc.text(`Klient: ${client.imie} ${client.nazwisko}`);
+      doc.fontSize(11).fillColor('#555').text('Wygenerowano: ' + new Date().toLocaleString('pl-PL'));
+      doc.text('Klient: ' + client.imie + ' ' + client.nazwisko);
       doc.moveDown();
-
-      doc.fillColor('#000').fontSize(14).text(`Dopasowanie: ${score}%`, { underline: true });
+      doc.fillColor('#000').fontSize(14).text('Dopasowanie: ' + score + '%', { underline: true });
       doc.moveDown(0.5);
-
       doc.fontSize(13).text('Dane nieruchomosci', { underline: true });
       doc.fontSize(11);
-      doc.text(`Cena: ${listing.price ? listing.price.toLocaleString('pl-PL') + ' zl' : 'brak danych'}`);
-      doc.text(`Metraz: ${listing.m2 ? listing.m2 + ' m2' : 'brak danych'}`);
-      doc.text(`Liczba pokoi: ${listing.rooms ?? 'brak danych'}`);
-      doc.text(`Pietro: ${listing.floor ?? 'brak danych'}`);
-      if (listing.sourceLink) doc.fillColor('#1a56db').text(`Zrodlo: ${listing.sourceLink}`, { link: listing.sourceLink });
+      doc.text('Cena: ' + (listing.price ? listing.price.toLocaleString('pl-PL') + ' zl' : 'brak danych'));
+      doc.text('Metraz: ' + (listing.m2 ? listing.m2 + ' m2' : 'brak danych'));
+      doc.text('Liczba pokoi: ' + (listing.rooms != null ? listing.rooms : 'brak danych'));
+      doc.text('Pietro: ' + (listing.floor != null ? listing.floor : 'brak danych'));
+      if (listing.sourceLink) doc.fillColor('#1a56db').text('Zrodlo: ' + listing.sourceLink, { link: listing.sourceLink });
       doc.fillColor('#000');
       doc.moveDown();
-
-      doc.fontSize(13).text('Opis (wyodrebniony z materialow zrodlowych)', { underline: true });
+      doc.fontSize(13).text('Opis', { underline: true });
       doc.fontSize(10).fillColor('#333').text(listing.raw);
       doc.fillColor('#000');
       doc.moveDown();
-
       doc.fontSize(13).text('Dojscie do komunikacji', { underline: true });
       doc.fontSize(10).fillColor('#333').text(walkingSection);
       doc.fillColor('#000');
       doc.moveDown();
-
       doc.fontSize(13).text('Zalety', { underline: true });
       doc.fontSize(10);
-      pros.forEach(p => doc.text(`- ${p}`));
+      pros.forEach(p => doc.text('- ' + p));
       doc.moveDown(0.5);
       doc.fontSize(13).text('Wady', { underline: true });
       doc.fontSize(10);
-      cons.forEach(c => doc.text(`- ${c}`));
+      cons.forEach(c => doc.text('- ' + c));
       doc.moveDown();
-
       doc.fontSize(13).text('Analiza pod wynajem (szacunkowa)', { underline: true });
-      doc.fontSize(10).fillColor('#333').text(
-        rent
-          ? `Szacunkowy miesieczny czynsz najmu: ok. ${rent.toLocaleString('pl-PL')} zl (bardzo przyblizona regula kciuka, nie stanowi analizy rynkowej). Rentownosc roczna brutto: ok. ${((rent * 12 / listing.price) * 100).toFixed(1)}%.`
-          : 'Brak ceny nieruchomosci w danych zrodlowych - nie mozna wyliczyc szacunkowej rentownosci najmu.'
-      );
+      doc.fontSize(10).fillColor('#333').text(rent ? 'Szacunkowy miesieczny czynsz najmu: ok. ' + rent.toLocaleString('pl-PL') + ' zl (przyblizona regula kciuka). Rentownosc roczna brutto: ok. ' + ((rent * 12 / listing.price) * 100).toFixed(1) + '%.' : 'Brak ceny w danych zrodlowych.');
       doc.fillColor('#000');
-
       doc.moveDown(1.5);
-      doc.fontSize(8).fillColor('#888').text(
-        'Raport wygenerowany automatycznie na podstawie tresci przeslanych plikow PDF i stron deweloperow. Dane moga byc niekompletne lub nieaktualne - zalecana weryfikacja bezposrednio u dewelopera.',
-        { align: 'left' }
-      );
-
+      doc.fontSize(8).fillColor('#888').text('Raport wygenerowany automatycznie na podstawie tresci przeslanych plikow PDF i stron deweloperow. Dane moga byc niekompletne - zalecana weryfikacja u dewelopera.');
       doc.end();
     } catch (err) {
       reject(err);
@@ -712,14 +825,11 @@ app.post('/api/research/run', async (req, res) => {
   }
   const client = db.get('clients').find({ id: client_id, profile_id: req.profileId }).value();
   if (!client) return res.status(404).json({ error: 'Nie znaleziono klienta.' });
-
   const pdfs = db.get('investmentPdfs').filter({ profile_id: req.profileId }).value();
   const links = db.get('developerLinks').filter({ profile_id: req.profileId }).value();
-
   if (!pdfs.length && !links.length) {
-    return res.status(400).json({ error: 'Brak danych źródłowych — poproś administratora o dodanie linków deweloperów lub PDF z inwestycjami w Admin Panelu.' });
+    return res.status(400).json({ error: 'Brak danych zrodlowych - dodaj linki deweloperow lub PDF w Admin Panelu.' });
   }
-
   let allListings = [];
   for (const pdf of pdfs) {
     allListings = allListings.concat(parseListingsFromText(pdf.text, pdf.filename, null));
@@ -728,49 +838,30 @@ app.post('/api/research/run', async (req, res) => {
     const text = await fetchDeveloperPageText(link.url);
     allListings = allListings.concat(parseListingsFromText(text, link.label || link.url, link.url));
   }
-
   if (!allListings.length) {
-    return res.status(422).json({ error: 'Nie udało się wyodrębnić żadnych ofert z podanych źródeł. Sprawdź, czy PDF zawiera czytelny tekst, a strony deweloperów są dostępne publicznie.' });
+    return res.status(422).json({ error: 'Nie udalo sie wyodrebnic zadnych ofert z podanych zrodel.' });
   }
-
   const criteria = extractPreferenceCriteria(preferences);
-  const prefLower = String(preferences).toLowerCase();
-  const scored = allListings.map(listing => ({ listing, score: scoreListing(listing, criteria, prefLower) }));
+  const scored = allListings.map(listing => ({ listing, score: scoreListing(listing, criteria) }));
   scored.sort((a, b) => b.score - a.score);
-
   const strong = scored.filter(s => s.score >= 90).slice(0, 5);
   const needsPreferenceChange = strong.length === 0;
-  const chosen = needsPreferenceChange
-    ? scored.filter(s => s.score >= 60 && s.score < 90).slice(0, 5)
-    : strong;
-
+  const chosen = needsPreferenceChange ? scored.filter(s => s.score >= 60 && s.score < 90).slice(0, 5) : strong;
   const results = [];
-  for (const { listing, score } of chosen) {
-    const pdfBuffer = await buildReportPdfBuffer({ client, listing, score });
+  for (const item of chosen) {
+    const pdfBuffer = await buildReportPdfBuffer({ client, listing: item.listing, score: item.score });
     results.push({
-      score,
-      price: listing.price,
-      m2: listing.m2,
-      rooms: listing.rooms,
-      floor: listing.floor,
-      source: listing.source,
-      sourceLink: listing.sourceLink,
-      excerpt: listing.raw.slice(0, 300),
+      score: item.score,
+      price: item.listing.price,
+      m2: item.listing.m2,
+      rooms: item.listing.rooms,
+      floor: item.listing.floor,
+      source: item.listing.source,
+      sourceLink: item.listing.sourceLink,
+      excerpt: item.listing.raw.slice(0, 300),
       pdfBase64: pdfBuffer.toString('base64')
     });
   }
-
-  const report = {
-    id: uuidv4(),
-    profile_id: req.profileId,
-    client_id,
-    created_at: now(),
-    needsPreferenceChange,
-    resultCount: results.length
-  };
-  db.get('researchReports').remove({ profile_id: req.profileId, client_id }).write();
-  db.get('researchReports').push(report).write();
-
   res.json({ needsPreferenceChange, results });
 });
 
@@ -780,5 +871,5 @@ app.get('*', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Mini CRM listening on port ${PORT}`);
+  console.log('Real Estate CRM listening on port ' + PORT);
 });
