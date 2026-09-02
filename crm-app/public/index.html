@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Mini CRM</title>
+<title>Real Estate CRM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css" />
@@ -13,9 +13,8 @@
 <div class="auth-screen" id="auth-screen">
   <div class="auth-card">
     <div class="auth-brand">
-      <span class="brand-mark">◆</span> Mini CRM
+      <span class="brand-mark">◆</span> <span class="brand-stack"><span class="brand-title">Real Estate CRM</span><span class="brand-sub">All In One</span></span>
     </div>
-
     <div id="account-login">
       <p class="auth-subtitle">Zaloguj się do swojego konta, aby korzystać z CRM.</p>
       <form id="form-account-login">
@@ -32,7 +31,6 @@
       </form>
       <p class="auth-switch">Nie masz konta? <button type="button" class="link-btn" id="btn-show-acc-register">Zarejestruj się</button></p>
     </div>
-
     <div id="account-register" style="display:none;">
       <p class="auth-subtitle">Stwórz konto, aby uzyskać dostęp do swojego prywatnego CRM.</p>
       <form id="form-account-register">
@@ -49,14 +47,12 @@
       </form>
       <p class="auth-switch">Masz już konto? <button type="button" class="link-btn" id="btn-show-acc-login">Zaloguj się</button></p>
     </div>
-
     <div id="profile-picker" style="display:none;">
       <p class="auth-subtitle">Wybierz profil (osobne CRM), albo stwórz nowy.</p>
       <div class="profile-grid" id="profile-grid"></div>
       <button class="btn btn-primary auth-full-btn" id="btn-show-profile-create">+ Nowy profil</button>
       <p class="auth-switch"><button type="button" class="link-btn" id="btn-account-logout">Wyloguj się z konta</button></p>
     </div>
-
     <div id="profile-create" style="display:none;">
       <button class="auth-back" id="btn-back-from-profile-create">← Wróć</button>
       <p class="auth-subtitle">Stwórz nowy profil — osobne CRM z własnym pipeline'em.</p>
@@ -93,37 +89,22 @@
   <nav class="sidebar">
     <div class="brand">
       <span class="brand-mark">◆</span>
-      <span class="brand-name">Mini CRM</span>
+      <span class="brand-stack">
+        <span class="brand-name">Real Estate CRM</span>
+        <span class="brand-sub">All In One</span>
+      </span>
     </div>
     <div class="nav-items">
-      <button class="nav-item active" data-view="deals">
-        <span class="nav-icon">◧</span> Deals
-      </button>
-      <button class="nav-item" data-view="contacts">
-        <span class="nav-icon">☰</span> Contacts
-      </button>
-      <button class="nav-item" data-view="activities">
-        <span class="nav-icon">◔</span> Activities
-      </button>
-      <button class="nav-item" data-view="calendar">
-        <span class="nav-icon">▦</span> Calendar
-      </button>
-      <button class="nav-item" data-view="profile">
-        <span class="nav-icon">☺</span> Profile
-      </button>
-      <button class="nav-item" data-view="settings">
-        <span class="nav-icon">⚙</span> Settings
-      </button>
-      <button class="nav-item" data-view="statistics">
-        <span class="nav-icon">◈</span> Statistics
-      </button>
-      <button class="nav-item nav-item-premium" data-view="research">
-        <span class="nav-icon">✦</span> <span class="premium-glow-text">Fast Research</span>
-      </button>
+      <button class="nav-item active" data-view="deals"><span class="nav-icon">◧</span> Deals</button>
+      <button class="nav-item" data-view="contacts"><span class="nav-icon">☰</span> Contacts</button>
+      <button class="nav-item" data-view="activities"><span class="nav-icon">◔</span> Activities</button>
+      <button class="nav-item" data-view="calendar"><span class="nav-icon">▦</span> Calendar</button>
+      <button class="nav-item" data-view="profile"><span class="nav-icon">☺</span> Profile</button>
+      <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span> Settings</button>
+      <button class="nav-item" data-view="statistics"><span class="nav-icon">◈</span> Statistics</button>
+      <button class="nav-item nav-item-premium" data-view="research"><span class="nav-icon">✦</span> <span class="premium-glow-text">Fast Research</span></button>
     </div>
-    <button class="nav-item nav-item-admin" data-view="admin" id="btn-nav-admin" style="display:none;">
-      <span class="nav-icon">🛠</span> Admin Panel
-    </button>
+    <button class="nav-item nav-item-admin" data-view="admin" id="btn-nav-admin" style="display:none;"><span class="nav-icon">🛠</span> Admin Panel</button>
     <div class="sidebar-footer" id="sidebar-current-user"></div>
   </nav>
 
@@ -141,7 +122,6 @@
         <button class="btn btn-primary" id="btn-new-lead">+ Nowy Lead</button>
       </header>
       <div class="board" id="board"></div>
-
       <div class="closed-deals-panel" id="closed-deals-panel" style="display:none;">
         <div class="closed-deals-columns">
           <div class="closed-zone closed-zone-won">
@@ -174,15 +154,7 @@
         <table class="contacts-table">
           <thead>
             <tr>
-              <th>Imię</th>
-              <th>Nazwisko</th>
-              <th>Mail</th>
-              <th>Telefon</th>
-              <th>Inwestycja</th>
-              <th>Prowizja</th>
-              <th>Preferencje</th>
-              <th>Etap</th>
-              <th></th>
+              <th>Imię</th><th>Nazwisko</th><th>Mail</th><th>Telefon</th><th>Inwestycja</th><th>Prowizja</th><th>Preferencje</th><th>Etap</th><th></th>
             </tr>
           </thead>
           <tbody id="contacts-body"></tbody>
@@ -230,22 +202,10 @@
       <div class="profile-card">
         <div class="client-view-avatar profile-card-avatar" id="profile-avatar"></div>
         <div class="client-view-grid" style="flex:1;">
-          <div>
-            <div class="client-view-label">Imię i nazwisko</div>
-            <div class="client-view-value" id="profile-full-name"></div>
-          </div>
-          <div>
-            <div class="client-view-label">Pseudonim</div>
-            <div class="client-view-value" id="profile-pseudonim"></div>
-          </div>
-          <div>
-            <div class="client-view-label">Rynek</div>
-            <div class="client-view-value" id="profile-rynek"></div>
-          </div>
-          <div>
-            <div class="client-view-label">Mail konta</div>
-            <div class="client-view-value" id="profile-mail"></div>
-          </div>
+          <div><div class="client-view-label">Imię i nazwisko</div><div class="client-view-value" id="profile-full-name"></div></div>
+          <div><div class="client-view-label">Pseudonim</div><div class="client-view-value" id="profile-pseudonim"></div></div>
+          <div><div class="client-view-label">Rynek</div><div class="client-view-value" id="profile-rynek"></div></div>
+          <div><div class="client-view-label">Mail konta</div><div class="client-view-value" id="profile-mail"></div></div>
         </div>
       </div>
       <div style="display:flex; gap:10px; margin-top:20px;">
@@ -258,18 +218,15 @@
       <header class="view-header">
         <div>
           <h1>Settings</h1>
-          <p class="subtitle">Ustawienia prowizji i kopia zapasowa danych</p>
+          <p class="subtitle">Ustawienia prowizji, styl strony i kopie danych</p>
         </div>
       </header>
-
       <div class="settings-banner" id="persistence-banner" style="display:none;">
-        ⚠️ Baza danych na serwerze nie jest podłączona do trwałego dysku (Render Disk) — po kolejnym wdrożeniu dane mogą zniknąć.
-        Regularnie rób kopię zapasową poniżej, a najlepiej dodaj Disk w ustawieniach Render (patrz README).
+        Baza danych nie jest podłączona do trwałego dysku — po kolejnym wdrożeniu dane mogą zniknąć.
       </div>
-
       <div class="settings-section">
         <h3>Podział prowizji agenta</h3>
-        <p class="settings-hint">Ten % określa, jaką część prowizji z transakcji zatrzymujesz Ty (reszta idzie do agencji). Używany do wyliczeń w danych klienta.</p>
+        <p class="settings-hint">Domyślny % prowizji. Dla pojedynczej transakcji możesz go nadpisać w oknie klienta.</p>
         <div class="settings-row">
           <select id="settings-split">
             <option value="45">45%</option>
@@ -280,13 +237,35 @@
           <button class="btn btn-primary" id="btn-save-split">Zapisz</button>
         </div>
       </div>
-
+      <div class="settings-section">
+        <h3>Styl strony</h3>
+        <p class="settings-hint">Wybierz jasny lub ciemny motyw interfejsu.</p>
+        <div class="settings-row">
+          <select id="settings-theme">
+            <option value="light">Jasny styl</option>
+            <option value="dark">Ciemny styl</option>
+          </select>
+          <button class="btn btn-primary" id="btn-save-theme">Zapisz</button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <h3>Nazwy etapów w lejku (Deals)</h3>
+        <p class="settings-hint">Zmień nazwy kolumn na tablicy Deals. Klienci automatycznie przechodzą pod nową nazwę.</p>
+        <div id="settings-stages-list"></div>
+        <button class="btn btn-primary" id="btn-save-stages">Zapisz nazwy etapów</button>
+      </div>
+      <div class="settings-section">
+        <h3>Automatyczne kopie bezpieczeństwa</h3>
+        <p class="settings-hint">System sam tworzy migawki bazy (co 10 minut, przy starcie, przed usunięciem klienta i przed importem).</p>
+        <button class="btn btn-ghost" id="btn-load-snapshots">Pokaż dostępne kopie</button>
+        <div class="admin-list" id="snapshots-list"></div>
+      </div>
       <div class="settings-section">
         <h3>Kopia zapasowa danych</h3>
-        <p class="settings-hint">Pobierz plik z kopią wszystkich Twoich klientów i akcji, albo przywróć dane z wcześniej pobranego pliku.</p>
+        <p class="settings-hint">Pobierz plik z kopią klientów i akcji, albo przywróć dane z pliku.</p>
         <div class="settings-row">
-          <button class="btn btn-ghost" id="btn-export-backup">⬇ Pobierz kopię zapasową</button>
-          <label class="btn btn-ghost" for="import-backup-input" style="cursor:pointer;">⬆ Przywróć z pliku</label>
+          <button class="btn btn-ghost" id="btn-export-backup">Pobierz kopię zapasową</button>
+          <label class="btn btn-ghost" for="import-backup-input" style="cursor:pointer;">Przywróć z pliku</label>
           <input type="file" id="import-backup-input" accept="application/json" style="display:none;" />
         </div>
       </div>
@@ -296,14 +275,38 @@
       <header class="view-header">
         <div>
           <h1>Statistics</h1>
-          <p class="subtitle">Statystyki liczone wyłącznie z transakcji zamkniętych jako „Udana”</p>
+          <p class="subtitle">Statystyki liczone wyłącznie z transakcji zamkniętych jako Udana</p>
         </div>
       </header>
+      <div class="stats-filters">
+        <div class="field">
+          <label for="stats-period">Okres</label>
+          <select id="stats-period">
+            <option value="all">Wszystko</option>
+            <option value="month">Miesięczny</option>
+            <option value="quarter">Kwartalny</option>
+            <option value="year">Roczny</option>
+          </select>
+        </div>
+        <div class="field" id="stats-month-wrap" style="display:none;">
+          <label for="stats-month">Miesiąc</label>
+          <select id="stats-month"></select>
+        </div>
+        <div class="field" id="stats-quarter-wrap" style="display:none;">
+          <label for="stats-quarter">Kwartał</label>
+          <select id="stats-quarter">
+            <option value="1">Q1 (sty-mar)</option>
+            <option value="2">Q2 (kwi-cze)</option>
+            <option value="3">Q3 (lip-wrz)</option>
+            <option value="4">Q4 (paz-gru)</option>
+          </select>
+        </div>
+      </div>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-label">Suma Prowizji Netto</div>
           <div class="stat-value" id="stat-agent-sum">—</div>
-          <div class="stat-hint">Suma „Udział agenta” ze wszystkich udanych transakcji</div>
+          <div class="stat-hint">Suma udziału agenta ze wszystkich udanych transakcji</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Łączny przychód wygenerowany przez agenta</div>
@@ -318,8 +321,30 @@
         <div class="stat-card">
           <div class="stat-label">Średnia wartość prowizji na transakcję</div>
           <div class="stat-value" id="stat-avg-net">—</div>
-          <div class="stat-hint">Średnia z „Do wypłaty” na udaną transakcję</div>
+          <div class="stat-hint">Średnia z Do wypłaty na udaną transakcję</div>
         </div>
+      </div>
+      <div class="stats-grid" style="margin-top:16px;">
+        <div class="stat-card">
+          <div class="stat-label">Skuteczność</div>
+          <div class="stat-value" id="stat-conversion">—</div>
+          <div class="stat-hint">Udane transakcje / wszystkie dodane leady</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Liczba udanych transakcji</div>
+          <div class="stat-value" id="stat-won-count">—</div>
+          <div class="stat-hint">Z sekcji Closed Deals - Udana</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Średni czas transakcji</div>
+          <div class="stat-value" id="stat-avg-days">—</div>
+          <div class="stat-hint">Od dodania leada do finalizacji</div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h3 class="chart-title">Transakcje i skuteczność w miesiącach</h3>
+        <p class="settings-hint">Słupki: liczba udanych transakcji w danym miesiącu. Pod spodem: skuteczność.</p>
+        <div class="chart-wrap" id="stats-chart"></div>
       </div>
       <p class="stats-count" id="stats-count"></p>
     </section>
@@ -331,7 +356,6 @@
           <p class="subtitle">Automatyczne dopasowanie mieszkań z inwestycji do preferencji klienta</p>
         </div>
       </header>
-
       <div class="research-panel">
         <div class="field">
           <label for="research-client-select">Wybierz klienta</label>
@@ -341,10 +365,9 @@
           <label for="research-preferences">Preferencje</label>
           <textarea id="research-preferences" rows="4" placeholder="Wpisz Preferencje Klienta"></textarea>
         </div>
-        <button class="btn btn-primary" id="btn-run-research">✦ Uruchom Fast Research</button>
+        <button class="btn btn-primary" id="btn-run-research">Uruchom Fast Research</button>
         <p class="research-hint" id="research-source-hint"></p>
       </div>
-
       <div id="research-results"></div>
     </section>
 
@@ -352,13 +375,12 @@
       <header class="view-header">
         <div>
           <h1>Admin Panel</h1>
-          <p class="subtitle">Źródła danych dla Fast Research: linki deweloperów i PDF z inwestycjami</p>
+          <p class="subtitle">Źródła danych dla Fast Research</p>
         </div>
       </header>
-
       <div class="settings-section">
         <h3>Linki do stron deweloperów</h3>
-        <p class="settings-hint">System pobierze treść tych stron podczas wyszukiwania dopasowań (Fast Research).</p>
+        <p class="settings-hint">System pobierze treść tych stron podczas wyszukiwania dopasowań.</p>
         <div class="field-row">
           <div class="field">
             <label for="admin-link-label">Nazwa (opcjonalnie)</label>
@@ -372,11 +394,10 @@
         <button class="btn btn-primary" id="btn-add-developer-link">+ Dodaj link</button>
         <div class="admin-list" id="admin-links-list"></div>
       </div>
-
       <div class="settings-section">
         <h3>PDF z listą inwestycji</h3>
-        <p class="settings-hint">Wklej (wgraj) PDF zawierający listę mieszkań / inwestycji do przeszukania.</p>
-        <label class="btn btn-ghost" for="admin-pdf-input" style="cursor:pointer;">⬆ Wgraj PDF</label>
+        <p class="settings-hint">Wgraj PDF zawierający listę mieszkań / inwestycji.</p>
+        <label class="btn btn-ghost" for="admin-pdf-input" style="cursor:pointer;">Wgraj PDF</label>
         <input type="file" id="admin-pdf-input" accept="application/pdf" style="display:none;" />
         <div class="admin-list" id="admin-pdfs-list"></div>
       </div>
@@ -411,7 +432,7 @@
       </div>
       <div class="field">
         <label for="lead-preferencje">Preferencje</label>
-        <textarea id="lead-preferencje" rows="3" placeholder="np. preferowany kontakt, zainteresowania, budżet..."></textarea>
+        <textarea id="lead-preferencje" rows="3" placeholder="np. preferowany kontakt, budżet..."></textarea>
       </div>
       <div class="field">
         <label for="lead-inwestycja">Inwestycja</label>
@@ -419,7 +440,7 @@
       </div>
       <div class="field-row">
         <div class="field">
-          <label for="lead-cena">Cena nieruchomości (obliczanie prowizji)</label>
+          <label for="lead-cena">Cena nieruchomości</label>
           <input type="number" id="lead-cena" min="0" step="0.01" placeholder="np. 650000" />
         </div>
         <div class="field">
@@ -453,7 +474,7 @@
       </div>
       <div class="field">
         <label for="action-name">Nazwa akcji *</label>
-        <input type="text" id="action-name" placeholder="np. Zadzwonić, Wysłać ofertę..." required />
+        <input type="text" id="action-name" placeholder="np. Zadzwonić..." required />
       </div>
       <div class="field">
         <label for="action-date">Data *</label>
@@ -503,9 +524,9 @@
 
 <div class="modal-overlay" id="modal-research-warning">
   <div class="modal research-warning-modal">
-    <div class="research-warning-icon">⚠</div>
+    <div class="research-warning-icon">!</div>
     <h2 class="research-warning-title">Klient musi zmienić preferencje</h2>
-    <p class="research-warning-text">Nie znaleziono ofert dopasowanych w co najmniej 90% do podanych kryteriów. Poniżej propozycje alternatywne (60–89% dopasowania) — mogą wymagać kompromisu w preferencjach klienta.</p>
+    <p class="research-warning-text">Nie znaleziono ofert dopasowanych w co najmniej 90% do podanych kryteriów. Poniżej propozycje alternatywne (60-89% dopasowania).</p>
     <button type="button" class="btn btn-primary" data-close="modal-research-warning">Rozumiem, pokaż alternatywy</button>
   </div>
 </div>
