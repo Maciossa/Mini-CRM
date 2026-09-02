@@ -873,3 +873,32 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log('Real Estate CRM listening on port ' + PORT);
 });
+
+
+// ---- KOPIE ZAPASOWE: tylko raz dziennie o polnocy ----
+// Blokujemy wszystkie inne powody tworzenia kopii (boot, auto co 10 min,
+// pre-delete, pre-import, shutdown) - przechodzi wylacznie 'daily'.
+const _origWriteSnapshot = writeSnapshot;
+writeSnapshot = function (reason) {
+  if (reason !== 'daily') return;
+  _origWriteSnapshot(reason);
+};
+
+// Przy kazdym starcie usuwamy kopie, ktore nie sa kopiami dziennymi
+// (w tym wszystkie stare kopie z poprzedniego harmonogramu co 10 minut).
+try {
+  fs.readdirSync(BACKUP_DIR)
+  .filter(f => f.startsWith('db-') && !f.endsWith('-daily.json'))
+  .forEach(f => { try { fs.unlinkSync(path.join(BACKUP_DIR, f)); } catch (e) { } });
+} catch (e) { }
+
+function msUntilNextMidnight() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+  return next.getTime() - now.getTime();
+}
+
+setTimeout(() => {
+  writeSnapshot('daily');
+  setInterval(() => writeSnapshot('daily'), 24 * 60 * 60 * 1000).unref();
+}, msUntilNextMidnight()).unref();
