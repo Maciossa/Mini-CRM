@@ -1297,3 +1297,194 @@ if (researchClientSelect) researchClientSelect.addEventListener('change', () => 
     }, true);
   });
 })();
+
+
+function dealMonthOf(c) {
+  if (Number(c.deal_month)) return Number(c.deal_month);
+  if (c.closed_at) return new Date(c.closed_at).getMonth() + 1;
+  return null;
+}
+
+function splitOf(c) {
+  return Number(c.deal_split) || (currentProfile && currentProfile.prowizja_agenta) || 50;
+}
+
+function inSelectedPeriod(c, monthGetter) {
+  const periodEl = $('#stats-period');
+  const period = periodEl ? periodEl.value : 'all';
+  if (period === 'all' || period === 'year') return true;
+  const m = monthGetter(c);
+  if (!m) return false;
+  if (period === 'month') return m === Number($('#stats-month').value);
+  if (period === 'quarter') return Math.ceil(m / 3) === Number($('#stats-quarter').value);
+  return true;
+}
+
+function renderStatsChart(wonAll) {
+  const wrap = $('#stats-chart');
+  if (!wrap) return;
+  const wonPerMonth = new Array(12).fill(0);
+  const leadsPerMonth = new Array(12).fill(0);
+  wonAll.forEach(c => {
+    const m = dealMonthOf(c);
+    if (m) wonPerMonth[m - 1]++;
+  });
+  clients.forEach(c => {
+    if (!c.created_at) return;
+    leadsPerMonth[new Date(c.created_at).getMonth()]++;
+  });
+  const maxWon = Math.max(1, ...wonPerMonth);
+  const periodEl = $('#stats-period');
+  const selectedMonth = (periodEl && periodEl.value === 'month') ? Number($('#stats-month').value) : null;
+  wrap.innerHTML = MONTHS_PL.map((name, i) => {
+    const won = wonPerMonth[i];
+    const leads = leadsPerMonth[i];
+    const conv = leads ? Math.round((won / leads) * 100) : 0;
+    const h = won ? Math.max(Math.round((won / maxWon) * 100), 4) : 0;
+    const active = selectedMonth === i + 1;
+    return '<div class="chart-col ' + (active ? 'active' : '') + '" title="' + name + ': ' + won + ' udanych z ' + leads + ' leadow"><div class="chart-bar-value">' + won + '</div><div class="chart-bar-track"><div class="chart-bar-fill" style="height:' + h + '%"></div></div><div class="chart-col-label">' + name.slice(0, 3) + '</div><div class="chart-col-conv">' + (leads ? conv + '%' : '-') + '</div></div>';
+  }).join('');
+}
+
+function renderStatisticsView() {
+  const monthSel = $('#stats-month');
+  if (monthSel && !monthSel.options.length) {
+    monthSel.innerHTML = MONTHS_PL.map((m, i) => '<option value="' + (i + 1) + '">' + m + '</option>').join('');
+    monthSel.value = String(new Date().getMonth() + 1);
+  }
+  const periodEl = $('#stats-period');
+  const period = periodEl ? periodEl.value : 'all';
+  if ($('#stats-month-wrap')) $('#stats-month-wrap').style.display = period === 'month' ? 'flex' : 'none';
+  if ($('#stats-quarter-wrap')) $('#stats-quarter-wrap').style.display = period === 'quarter' ? 'flex' : 'none';
+  const wonAll = clients.filter(c => c.deal_status === 'won');
+  const wonInPeriod = wonAll.filter(c => inSelectedPeriod(c, dealMonthOf));
+  const wonMoney = wonInPeriod.filter(c => c.cena_nieruchomosci && c.prowizja_procent);
+  let sumG = 0, sumC = 0, sumT = 0, sumN = 0;
+  wonMoney.forEach(c => {
+    const com = computeCommission(c.cena_nieruchomosci, c.prowizja_procent, splitOf(c));
+    sumG += com.agentGross; sumC += com.commissionAmount; sumT += com.tax; sumN += com.net;
+  });
+  $('#stat-agent-sum').textContent = formatMoney(sumG);
+  $('#stat-revenue-sum').textContent = formatMoney(sumC);
+  $('#stat-tax-sum').textContent = formatMoney(sumT);
+  $('#stat-avg-net').textContent = formatMoney(wonMoney.length ? sumN / wonMoney.length : 0);
+  const leadMonth = c => (c.created_at ? new Date(c.created_at).getMonth() + 1 : null);
+  const leadsInPeriod = clients.filter(c => inSelectedPeriod(c, leadMonth));
+  const conv = leadsInPeriod.length ? (wonInPeriod.length / leadsInPeriod.length) * 100 : 0;
+  if ($('#stat-conversion')) $('#stat-conversion').textContent = leadsInPeriod.length ? conv.toFixed(1) + '%' : '-';
+  if ($('#stat-won-count')) $('#stat-won-count').textContent = String(wonInPeriod.length);
+  const timed = wonInPeriod.filter(c => c.created_at && c.closed_at);
+  const avgDays = timed.length ? timed.reduce((a, c) => a + (new Date(c.closed_at) - new Date(c.created_at)), 0) / timed.length / 86400000 : null;
+  if ($('#stat-avg-days')) $('#stat-avg-days').textContent = avgDays === null ? '-' : avgDays.toFixed(1) + ' dni';
+  $('#stats-count').textContent = wonMoney.length ? 'Na podstawie ' + wonMoney.length + ' udanych transakcji z cena i prowizja (' + wonInPeriod.length + ' udanych w okresie, ' + leadsInPeriod.length + ' leadow).' : 'Brak udanych transakcji z cena i prowizja w wybranym okresie.';
+  renderStatsChart(wonAll);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+}
+
+function renderStageSettings() {
+  const box = $('#settings-stages-list');
+  if (!box) return;
+  const list = (currentProfile && Array.isArray(currentProfile.stages) && currentProfile.stages.length) ? currentProfile.stages : STAGES;
+  box.innerHTML = list.map((name, i) => '<div class="field"><label for="stage-name-' + i + '">Etap ' + (i + 1) + '</label><input type="text" id="stage-name-' + i + '" class="stage-name-input" value="' + escapeHtml(name) + '" /></div>').join('');
+}
+
+async function renderSettingsView() {
+  if (!currentProfile) return;
+  $('#settings-split').value = String(currentProfile.prowizja_agenta || 50);
+  if ($('#settings-theme')) $('#settings-theme').value = currentProfile.theme || 'light';
+  renderStageSettings();
+  try {
+    const status = await (await fetch('/api/system/status')).json();
+    $('#persistence-banner').style.display = status.persistent ? 'none' : 'block';
+  } catch (e) { }
+}
+
+['#stats-period', '#stats-month', '#stats-quarter'].forEach(sel => {
+  const el = $(sel);
+  if (el) el.addEventListener('change', () => renderStatisticsView());
+});
+
+const themeBtnNew = $('#btn-save-theme');
+if (themeBtnNew) themeBtnNew.addEventListener('click', async () => {
+  const theme = $('#settings-theme').value;
+  try {
+    const data = await api('/profiles/me/settings', { method: 'PUT', body: JSON.stringify({ theme: theme }) });
+    currentProfile = data;
+    applyTheme(theme);
+    toast('Styl strony zapisany.');
+  } catch (err) { toast(err.message); }
+});
+
+const stagesBtnNew = $('#btn-save-stages');
+if (stagesBtnNew) stagesBtnNew.addEventListener('click', async () => {
+  const stages = $$('.stage-name-input').map(i => i.value.trim());
+  if (stages.some(v => !v)) { toast('Nazwy etapow nie moga byc puste.'); return; }
+  try {
+    const data = await api('/profiles/me/settings', { method: 'PUT', body: JSON.stringify({ stages: stages }) });
+    currentProfile = data;
+    STAGES = data.stages;
+    Object.keys(STAGE_COLORS).forEach(k => delete STAGE_COLORS[k]);
+    STAGES.forEach((st, i) => { STAGE_COLORS[st] = 'var(--stage-' + (i + 1) + ')'; });
+    const sel = $('#lead-stage');
+    if (sel) sel.innerHTML = STAGES.map(st => '<option value="' + escapeHtml(st) + '">' + escapeHtml(st) + '</option>').join('');
+    await refreshAll();
+    renderBoard();
+    renderStageSettings();
+    toast('Nazwy etapow zapisane.');
+  } catch (err) { toast(err.message); }
+});
+
+const snapBtnNew = $('#btn-load-snapshots');
+if (snapBtnNew) snapBtnNew.addEventListener('click', async () => {
+  const list = $('#snapshots-list');
+  list.innerHTML = '<div class="admin-list-empty">Wczytywanie...</div>';
+  try {
+    const snaps = await api('/backup/snapshots');
+    list.innerHTML = snaps.length ? snaps.map(sn => '<div class="admin-list-item"><div><div class="name">' + new Date(sn.created_at).toLocaleString('pl-PL') + '</div><div class="url">' + escapeHtml(sn.file) + '</div></div><button class="btn-restore-snap" data-file="' + escapeHtml(sn.file) + '">Przywroc</button></div>').join('') : '<div class="admin-list-empty">Brak zapisanych kopii.</div>';
+    $$('.btn-restore-snap').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('Przywrocic dane tego profilu z wybranej kopii?')) return;
+      try {
+        const r = await api('/backup/snapshots/' + encodeURIComponent(b.dataset.file) + '/restore', { method: 'POST' });
+        await refreshAll();
+        renderBoard();
+        toast('Przywrocono ' + r.restored_clients + ' klientow i ' + r.restored_activities + ' akcji.');
+      } catch (err) { toast(err.message); }
+    }));
+  } catch (err) {
+    list.innerHTML = '<div class="admin-list-empty">Nie udalo sie wczytac kopii.</div>';
+  }
+});
+
+const origOpenClientViewModal = openClientViewModal;
+openClientViewModal = function (id) {
+  origOpenClientViewModal(id);
+  const c = clients.find(x => x.id === id);
+  if (!c || !c.deal_status) return;
+  const body = $('#client-view-body');
+  if (!body || body.querySelector('#deal-month-select')) return;
+  const pill = body.querySelector('.deal-status-pill');
+  if (!pill) return;
+  const box = document.createElement('div');
+  box.className = 'closed-deal-settings';
+  box.innerHTML = '<div class="field"><label for="deal-month-select">Miesiac transakcji</label><select id="deal-month-select">' + MONTHS_PL.map((m, i) => '<option value="' + (i + 1) + '"' + (Number(c.deal_month) === i + 1 ? ' selected' : '') + '>' + m + '</option>').join('') + '</select></div><div class="field"><label for="deal-split-select">Podzial prowizji agenta</label><select id="deal-split-select">' + [45, 50, 55, 60].map(v => '<option value="' + v + '"' + (splitOf(c) === v ? ' selected' : '') + '>' + v + '%</option>').join('') + '</select></div><button type="button" class="btn btn-primary" id="btn-save-deal-details">Zapisz</button>';
+  pill.parentNode.insertBefore(box, pill.nextSibling);
+  $('#btn-save-deal-details').addEventListener('click', async () => {
+    try {
+      await api('/clients/' + id, { method: 'PUT', body: JSON.stringify({ deal_month: Number($('#deal-month-select').value), deal_split: Number($('#deal-split-select').value) }) });
+      await refreshAll();
+      renderClosedDeals();
+      closeModal('modal-client-view');
+      openClientViewModal(id);
+      toast('Zapisano dane transakcji.');
+    } catch (err) { toast(err.message); }
+  });
+};
+
+const origShowAppFn = showApp;
+showApp = async function () {
+  await origShowAppFn();
+  if (currentProfile) applyTheme(currentProfile.theme || 'light');
+};
