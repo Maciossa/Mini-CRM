@@ -1488,3 +1488,40 @@ showApp = async function () {
   await origShowAppFn();
   if (currentProfile) applyTheme(currentProfile.theme || 'light');
 };
+
+
+(function () {
+  const oldBtn = document.getElementById('btn-load-snapshots');
+  if (!oldBtn) return;
+  const btn = oldBtn.cloneNode(true);
+  btn.textContent = 'Pokaz dostepne kopie';
+  oldBtn.parentNode.replaceChild(btn, oldBtn);
+  btn.addEventListener('click', async () => {
+    const list = document.getElementById('snapshots-list');
+    if (!list) return;
+    if (list.dataset.open === '1') {
+      list.innerHTML = '';
+      list.dataset.open = '0';
+      btn.textContent = 'Pokaz dostepne kopie';
+      return;
+    }
+    list.dataset.open = '1';
+    btn.textContent = 'Ukryj kopie';
+    list.innerHTML = '<div class="admin-list-empty">Wczytywanie...</div>';
+    try {
+      const snaps = await api('/backup/snapshots');
+      list.innerHTML = snaps.length ? snaps.map(sn => '<div class="admin-list-item"><div><div class="name">' + new Date(sn.created_at).toLocaleString('pl-PL') + '</div><div class="url">' + escapeHtml(sn.file) + '</div></div><button class="btn-restore-snap" data-file="' + escapeHtml(sn.file) + '">Przywroc</button></div>').join('') : '<div class="admin-list-empty">Brak kopii. Pierwsza kopia powstanie automatycznie o polnocy.</div>';
+      $$('.btn-restore-snap').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('Przywrocic dane tego profilu z wybranej kopii?')) return;
+        try {
+          const r = await api('/backup/snapshots/' + encodeURIComponent(b.dataset.file) + '/restore', { method: 'POST' });
+          await refreshAll();
+          renderBoard();
+          toast('Przywrocono ' + r.restored_clients + ' klientow i ' + r.restored_activities + ' akcji.');
+        } catch (err) { toast(err.message); }
+      }));
+    } catch (err) {
+      list.innerHTML = '<div class="admin-list-empty">Nie udalo sie wczytac kopii.</div>';
+    }
+  });
+})();
