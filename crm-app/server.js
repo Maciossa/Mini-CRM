@@ -902,3 +902,95 @@ setTimeout(() => {
   writeSnapshot('daily');
   setInterval(() => writeSnapshot('daily'), 24 * 60 * 60 * 1000).unref();
 }, msUntilNextMidnight()).unref();
+
+
+// ==== YOUR PLANNER: zadania i cele ====
+db.defaults({ plannerTasks: [] }).write();
+
+const PLANNER_SCOPES = ['daily', 'weekly', 'monthly', 'yearly'];
+const PLANNER_RECURRENCE = ['none', 'daily', 'weekly'];
+
+app.use('/api/planner', requireProfile);
+
+app.get('/api/planner', (req, res) => {
+  res.json(db.get('plannerTasks').filter({ profile_id: req.profileId }).value());
+});
+
+function sanitizePlanner(body, existing) {
+  const out = {};
+  if (body.title !== undefined) out.title = String(body.title).trim();
+  if (body.notes !== undefined) out.notes = String(body.notes || '').trim();
+  if (body.scope !== undefined) {
+    if (!PLANNER_SCOPES.includes(body.scope)) return { error: 'Nieprawidlowy zakres zadania.' };
+    out.scope = body.scope;
+  }
+  if (body.date !== undefined) out.date = body.date ? String(body.date) : null;
+  if (body.time_start !== undefined) out.time_start = body.time_start ? String(body.time_start) : null;
+  if (body.time_end !== undefined) out.time_end = body.time_end ? String(body.time_end) : null;
+  if (body.recurrence !== undefined) {
+    if (!PLANNER_RECURRENCE.includes(body.recurrence)) return { error: 'Nieprawidlowy typ powtarzania.' };
+    out.recurrence = body.recurrence;
+  }
+  if (body.weekdays !== undefined) {
+    const wd = Array.isArray(body.weekdays) ? body.weekdays.map(Number).filter(n => n >= 0 && n <= 6) : [];
+    out.weekdays = Array.from(new Set(wd)).sort();
+  }
+  if (body.done_dates !== undefined) {
+    out.done_dates = Array.isArray(body.done_dates) ? body.done_dates.map(String) : [];
+  }
+  if (body.done !== undefined) out.done = Boolean(body.done);
+  const title = out.title !== undefined ? out.title : (existing && existing.title);
+  if (!title) return { error: 'Nazwa zadania jest wymagana.' };
+  const recurrence = out.recurrence !== undefined ? out.recurrence : (existing && existing.recurrence) || 'none';
+  const weekdays = out.weekdays !== undefined ? out.weekdays : (existing && existing.weekdays) || [];
+  if (recurrence === 'weekly' && !weekdays.length) {
+    return { error: 'Dla powtarzania tygodniowego wybierz przynajmniej jeden dzien.' };
+  }
+  return { value: out };
+}
+
+app.post('/api/planner', (req, res) => {
+  const parsed = sanitizePlanner(req.body, null);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const task = {
+    id: uuidv4(),
+    profile_id: req.profileId,
+    title: '',
+    notes: '',
+    scope: 'daily',
+    date: null,
+    time_start: null,
+    time_end: null,
+    recurrence: 'none',
+    weekdays: [],
+    done: false,
+    done_dates: [],
+    created_at: now(),
+    ...parsed.value
+  };
+  db.get('plannerTasks').push(task).write();
+  res.status(201).json(task);
+});
+
+app.put('/api/planner/:id', (req, res) => {
+  const task = db.get('plannerTasks').find({ id: req.params.id, profile_id: req.profileId }).value();
+  if (!task) return res.status(404).json({ error: 'Nie znaleziono zadania.' });
+  const parsed = sanitizePlanner(req.body, task);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  db.get('plannerTasks').find({ id: req.params.id, profile_id: req.profileId }).assign(parsed.value).write();
+  res.json(db.get('plannerTasks').find({ id: req.params.id, profile_id: req.profileId }).value());
+});
+
+app.delete('/api/planner/:id', (req, res) => {
+  db.get('plannerTasks').remove({ id: req.params.id, profile_id: req.profileId }).write();
+  res.status(204).end();
+});
+
+// Przesun katch-all '*' na koniec stosu tras, zeby /api/planner dzialalo.
+try {
+  const layers = app._router.stack;
+  const i = layers.findIndex(l => l.route && l.route.path === '*');
+  if (i !== -1) layers.push(layers.splice(i, 1)[0]);
+} catch (e) {
+  console.error('Nie udalo sie przesunac trasy catch-all:', e.message);
+}
