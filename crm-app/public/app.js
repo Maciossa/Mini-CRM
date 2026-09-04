@@ -1525,3 +1525,227 @@ showApp = async function () {
     }
   });
 })();
+
+
+let plannerTasks = [];
+let plannerScope = 'daily';
+let plannerMode = 'calendar';
+let plannerDate = new Date();
+const WD_SHORT = ['Nd','Pn','Wt','Sr','Cz','Pt','Sb'];
+
+function isoDate(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function taskOccursOn(t, dateStr) {
+  if (t.recurrence === 'daily') return true;
+  if (t.recurrence === 'weekly') return (t.weekdays || []).includes(new Date(dateStr + 'T00:00:00').getDay());
+  return t.date === dateStr;
+}
+
+function isTaskDone(t, dateStr) {
+  if (t.recurrence === 'none') return Boolean(t.done);
+  return (t.done_dates || []).includes(dateStr);
+}
+
+async function toggleTaskDone(t, dateStr) {
+  try {
+    if (t.recurrence === 'none') {
+      await api('/planner/' + t.id, { method: 'PUT', body: JSON.stringify({ done: !t.done }) });
+    } else {
+      const list = new Set(t.done_dates || []);
+      if (list.has(dateStr)) list.delete(dateStr); else list.add(dateStr);
+      await api('/planner/' + t.id, { method: 'PUT', body: JSON.stringify({ done_dates: Array.from(list) }) });
+    }
+    await loadPlanner();
+  } catch (err) { toast(err.message); }
+}
+
+async function loadPlanner() {
+  try { plannerTasks = await api('/planner'); } catch (err) { plannerTasks = []; }
+  renderPlanner();
+}
+
+function renderPlanner() {
+  const cal = $('#planner-calendar');
+  const list = $('#planner-list');
+  const daynav = $('#planner-daynav');
+  if (!cal || !list) return;
+  const showDayNav = plannerScope === 'daily' && plannerMode === 'calendar';
+  if (daynav) daynav.style.display = showDayNav ? 'flex' : 'none';
+  cal.style.display = plannerMode === 'calendar' ? 'block' : 'none';
+  list.style.display = plannerMode === 'list' ? 'block' : 'none';
+  if (plannerMode === 'calendar') renderPlannerCalendar(); else renderPlannerList();
+}
+
+function renderPlannerCalendar() {
+  const cal = $('#planner-calendar');
+  const scoped = plannerTasks.filter(t => t.scope === plannerScope);
+  if (plannerScope !== 'daily') {
+    cal.innerHTML = scoped.length ? '<div class="goal-grid">' + scoped.map(t => '<div class="goal-card ' + (t.done ? 'done' : '') + '"><label class="goal-check"><input type="checkbox" class="task-check" data-id="' + t.id + '" ' + (t.done ? 'checked' : '') + ' /><span class="goal-title">' + escapeHtml(t.title) + '</span></label>' + (t.notes ? '<div class="goal-notes">' + escapeHtml(t.notes) + '</div>' : '') + '<button class="btn-small task-edit" data-id="' + t.id + '">Edytuj</button></div>').join('') + '</div>' : '<div class="admin-list-empty">Brak celow w tym zakresie.</div>';
+    attachPlannerEvents(isoDate(plannerDate));
+    return;
+  }
+  const dayStr = isoDate(plannerDate);
+  $('#planner-day-label').textContent = WD_SHORT[plannerDate.getDay()] + ', ' + plannerDate.toLocaleDateString('pl-PL', { day:'numeric', month:'long', year:'numeric' });
+  const todays = scoped.filter(t => taskOccursOn(t, dayStr));
+  const untimed = todays.filter(t => !t.time_start);
+  let html = '<div class="hour-grid">';
+  for (let h = 0; h < 24; h++) {
+    const hh = String(h).padStart(2,'0');
+    const inHour = todays.filter(t => t.time_start && Number(t.time_start.slice(0,2)) === h);
+    html += '<div class="hour-row"><div class="hour-label">' + hh + ':00</div><div class="hour-slot" data-hour="' + hh + '">' + inHour.map(t => '<div class="task-chip ' + (isTaskDone(t,dayStr)?'done':'') + '"><input type="checkbox" class="task-check" data-id="' + t.id + '" ' + (isTaskDone(t,dayStr)?'checked':'') + ' /><span class="task-chip-time">' + escapeHtml(t.time_start) + (t.time_end ? '-' + escapeHtml(t.time_end) : '') + '</span><span class="task-chip-title">' + escapeHtml(t.title) + '</span>' + (t.recurrence !== 'none' ? '<span class="task-repeat">R</span>' : '') + '<button class="task-edit" data-id="' + t.id + '">E</button></div>').join('') + '</div></div>';
+  }
+  html += '</div>';
+  if (untimed.length) {
+    html = '<div class="untimed-box"><div class="untimed-title">Bez godziny</div>' + untimed.map(t => '<div class="task-chip ' + (isTaskDone(t,dayStr)?'done':'') + '"><input type="checkbox" class="task-check" data-id="' + t.id + '" ' + (isTaskDone(t,dayStr)?'checked':'') + ' /><span class="task-chip-title">' + escapeHtml(t.title) + '</span>' + (t.recurrence !== 'none' ? '<span class="task-repeat">R</span>' : '') + '<button class="task-edit" data-id="' + t.id + '">E</button></div>').join('') + '</div>' + html;
+  }
+  cal.innerHTML = html;
+  attachPlannerEvents(dayStr);
+  $$('.hour-slot').forEach(slot => slot.addEventListener('click', e => {
+    if (e.target.closest('.task-chip')) return;
+    openTaskModal(null, { hour: slot.dataset.hour, date: dayStr });
+  }));
+}
+
+function renderPlannerList() {
+  const list = $('#planner-list');
+  const scoped = plannerTasks.filter(t => t.scope === plannerScope);
+  const dayStr = isoDate(plannerDate);
+  if (!scoped.length) { list.innerHTML = '<div class="admin-list-empty">Brak zadan w tym zakresie.</div>'; return; }
+  const sorted = scoped.slice().sort((a,b) => (a.time_start || '99').localeCompare(b.time_start || '99'));
+  list.innerHTML = sorted.map(t => {
+    let when = '';
+    if (t.recurrence === 'daily') when = 'Codziennie';
+    else if (t.recurrence === 'weekly') when = (t.weekdays || []).map(d => WD_SHORT[d]).join(', ');
+    else if (t.date) when = new Date(t.date + 'T00:00:00').toLocaleDateString('pl-PL');
+    const time = t.time_start ? (t.time_start + (t.time_end ? '-' + t.time_end : '')) : '';
+    return '<div class="task-row ' + (isTaskDone(t,dayStr)?'done':'') + '"><input type="checkbox" class="task-check" data-id="' + t.id + '" ' + (isTaskDone(t,dayStr)?'checked':'') + ' /><div class="task-row-main"><div class="task-row-title">' + escapeHtml(t.title) + '</div><div class="task-row-meta">' + [when,time].filter(Boolean).join(' - ') + (t.notes ? ' - ' + escapeHtml(t.notes) : '') + '</div></div><button class="btn-small task-edit" data-id="' + t.id + '">Edytuj</button></div>';
+  }).join('');
+  attachPlannerEvents(dayStr);
+}
+
+function attachPlannerEvents(dayStr) {
+  $$('.task-check').forEach(chk => chk.addEventListener('click', async e => {
+    e.stopPropagation();
+    const t = plannerTasks.find(x => x.id === chk.dataset.id);
+    if (t) await toggleTaskDone(t, dayStr);
+  }));
+  $$('.task-edit').forEach(btn => btn.addEventListener('click', e => {
+    e.stopPropagation();
+    openTaskModal(btn.dataset.id);
+  }));
+}
+
+function openTaskModal(id, preset) {
+  const form = $('#form-task');
+  form.reset();
+  $('#task-id').value = '';
+  $('#task-weekdays-wrap').style.display = 'none';
+  $$('#task-weekdays input').forEach(c => { c.checked = false; });
+  $('#task-delete-btn').style.display = 'none';
+  if (id) {
+    const t = plannerTasks.find(x => x.id === id);
+    if (!t) return;
+    $('#task-modal-title').textContent = 'Edytuj zadanie';
+    $('#task-id').value = t.id;
+    $('#task-title').value = t.title;
+    $('#task-scope').value = t.scope;
+    $('#task-date').value = t.date || '';
+    $('#task-start').value = t.time_start || '';
+    $('#task-end').value = t.time_end || '';
+    $('#task-recurrence').value = t.recurrence;
+    $('#task-notes').value = t.notes || '';
+    (t.weekdays || []).forEach(d => { const c = $('#task-weekdays input[value="' + d + '"]'); if (c) c.checked = true; });
+    $('#task-weekdays-wrap').style.display = t.recurrence === 'weekly' ? 'block' : 'none';
+    $('#task-delete-btn').style.display = 'inline-block';
+  } else {
+    $('#task-modal-title').textContent = 'Nowe zadanie';
+    $('#task-scope').value = plannerScope;
+    $('#task-date').value = (preset && preset.date) || isoDate(plannerDate);
+    if (preset && preset.hour) {
+      $('#task-start').value = preset.hour + ':00';
+      $('#task-end').value = String(Math.min(23, Number(preset.hour)+1)).padStart(2,'0') + ':00';
+    }
+  }
+  $('#task-time-row').style.display = $('#task-scope').value === 'daily' ? 'flex' : 'none';
+  openModal('modal-task');
+}
+
+$('#task-recurrence').addEventListener('change', () => {
+  $('#task-weekdays-wrap').style.display = $('#task-recurrence').value === 'weekly' ? 'block' : 'none';
+});
+$('#task-scope').addEventListener('change', () => {
+  $('#task-time-row').style.display = $('#task-scope').value === 'daily' ? 'flex' : 'none';
+});
+
+$('#form-task').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id = $('#task-id').value;
+  const recurrence = $('#task-recurrence').value;
+  const payload = {
+    title: $('#task-title').value.trim(),
+    scope: $('#task-scope').value,
+    notes: $('#task-notes').value.trim(),
+    recurrence: recurrence,
+    weekdays: recurrence === 'weekly' ? $$('#task-weekdays input:checked').map(c => Number(c.value)) : [],
+    date: recurrence === 'none' ? ($('#task-date').value || null) : null,
+    time_start: $('#task-start').value || null,
+    time_end: $('#task-end').value || null
+  };
+  try {
+    if (id) await api('/planner/' + id, { method: 'PUT', body: JSON.stringify(payload) });
+    else await api('/planner', { method: 'POST', body: JSON.stringify(payload) });
+    closeModal('modal-task');
+    await loadPlanner();
+    toast(id ? 'Zadanie zaktualizowane.' : 'Zadanie dodane.');
+  } catch (err) { toast(err.message); }
+});
+
+$('#task-delete-btn').addEventListener('click', async () => {
+  const id = $('#task-id').value;
+  if (!id || !confirm('Usunac to zadanie?')) return;
+  try {
+    await api('/planner/' + id, { method: 'DELETE' });
+    closeModal('modal-task');
+    await loadPlanner();
+    toast('Zadanie usuniete.');
+  } catch (err) { toast(err.message); }
+});
+
+$('#btn-new-task').addEventListener('click', () => openTaskModal(null));
+
+$$('.planner-scope').forEach(b => b.addEventListener('click', () => {
+  $$('.planner-scope').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  plannerScope = b.dataset.scope;
+  renderPlanner();
+}));
+
+$$('.planner-mode').forEach(b => b.addEventListener('click', () => {
+  $$('.planner-mode').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  plannerMode = b.dataset.mode;
+  renderPlanner();
+}));
+
+$('#planner-prev').addEventListener('click', () => { plannerDate.setDate(plannerDate.getDate()-1); renderPlanner(); });
+$('#planner-next').addEventListener('click', () => { plannerDate.setDate(plannerDate.getDate()+1); renderPlanner(); });
+$('#planner-today').addEventListener('click', () => { plannerDate = new Date(); renderPlanner(); });
+
+$$('.nav-item').forEach(btn => {
+  if (btn.dataset.view === 'planner') btn.addEventListener('click', () => loadPlanner());
+});
+
+$$('.settings-acc-head').forEach((head, i) => {
+  const body = head.nextElementSibling;
+  if (!body) return;
+  const open = i === 0;
+  body.style.display = open ? 'block' : 'none';
+  head.classList.toggle('open', open);
+  head.addEventListener('click', () => {
+    const isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : 'block';
+    head.classList.toggle('open', !isOpen);
+  });
+});
