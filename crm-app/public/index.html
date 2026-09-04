@@ -55,14 +55,14 @@
     </div>
     <div id="profile-create" style="display:none;">
       <button class="auth-back" id="btn-back-from-profile-create">← Wróć</button>
-      <p class="auth-subtitle">Stwórz nowy profil — osobne CRM z własnym pipeline'em.</p>
+      <p class="auth-subtitle">Stwórz nowy profil.</p>
       <form id="form-profile-create">
         <div class="field">
           <label for="prof-name">Imię i nazwisko</label>
           <input type="text" id="prof-name" required />
         </div>
         <div class="field">
-          <label for="prof-pseudonim">Pseudonim (będzie wyświetlany)</label>
+          <label for="prof-pseudonim">Pseudonim</label>
           <input type="text" id="prof-pseudonim" required />
         </div>
         <div class="field">
@@ -102,6 +102,7 @@
       <button class="nav-item" data-view="profile"><span class="nav-icon">☺</span> Profile</button>
       <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span> Settings</button>
       <button class="nav-item" data-view="statistics"><span class="nav-icon">◈</span> Statistics</button>
+      <button class="nav-item" data-view="planner"><span class="nav-icon">✓</span> Your Planner</button>
       <button class="nav-item nav-item-premium" data-view="research"><span class="nav-icon">✦</span> <span class="premium-glow-text">Fast Research</span></button>
     </div>
     <button class="nav-item nav-item-admin" data-view="admin" id="btn-nav-admin" style="display:none;"><span class="nav-icon">🛠</span> Admin Panel</button>
@@ -222,51 +223,76 @@
         </div>
       </header>
       <div class="settings-banner" id="persistence-banner" style="display:none;">
-        Baza danych nie jest podłączona do trwałego dysku — po kolejnym wdrożeniu dane mogą zniknąć.
+        Baza danych nie jest podłączona do trwałego dysku.
       </div>
-      <div class="settings-section">
-        <h3>Podział prowizji agenta</h3>
-        <p class="settings-hint">Domyślny % prowizji. Dla pojedynczej transakcji możesz go nadpisać w oknie klienta.</p>
-        <div class="settings-row">
-          <select id="settings-split">
-            <option value="45">45%</option>
-            <option value="50">50%</option>
-            <option value="55">55%</option>
-            <option value="60">60%</option>
-          </select>
-          <button class="btn btn-primary" id="btn-save-split">Zapisz</button>
+      <div class="settings-section settings-accordion">
+        <button type="button" class="settings-acc-head">
+          <span class="settings-acc-title">Podział prowizji agenta</span>
+          <span class="settings-acc-arrow">▾</span>
+        </button>
+        <div class="settings-acc-body">
+          <p class="settings-hint">Domyślny % prowizji. Dla pojedynczej transakcji możesz go nadpisać w oknie klienta.</p>
+          <div class="settings-row">
+            <select id="settings-split">
+              <option value="45">45%</option>
+              <option value="50">50%</option>
+              <option value="55">55%</option>
+              <option value="60">60%</option>
+            </select>
+            <button class="btn btn-primary" id="btn-save-split">Zapisz</button>
+          </div>
         </div>
       </div>
-      <div class="settings-section">
-        <h3>Styl strony</h3>
-        <p class="settings-hint">Wybierz jasny lub ciemny motyw interfejsu.</p>
-        <div class="settings-row">
-          <select id="settings-theme">
-            <option value="light">Jasny styl</option>
-            <option value="dark">Ciemny styl</option>
-          </select>
-          <button class="btn btn-primary" id="btn-save-theme">Zapisz</button>
+      <div class="settings-section settings-accordion">
+        <button type="button" class="settings-acc-head">
+          <span class="settings-acc-title">Styl strony</span>
+          <span class="settings-acc-arrow">▾</span>
+        </button>
+        <div class="settings-acc-body">
+          <p class="settings-hint">Wybierz jasny lub ciemny motyw interfejsu.</p>
+          <div class="settings-row">
+            <select id="settings-theme">
+              <option value="light">Jasny styl</option>
+              <option value="dark">Ciemny styl</option>
+            </select>
+            <button class="btn btn-primary" id="btn-save-theme">Zapisz</button>
+          </div>
         </div>
       </div>
-      <div class="settings-section">
-        <h3>Nazwy etapów w lejku (Deals)</h3>
-        <p class="settings-hint">Zmień nazwy kolumn na tablicy Deals. Klienci automatycznie przechodzą pod nową nazwę.</p>
-        <div id="settings-stages-list"></div>
-        <button class="btn btn-primary" id="btn-save-stages">Zapisz nazwy etapów</button>
+      <div class="settings-section settings-accordion">
+        <button type="button" class="settings-acc-head">
+          <span class="settings-acc-title">Nazwy etapów w lejku (Deals)</span>
+          <span class="settings-acc-arrow">▾</span>
+        </button>
+        <div class="settings-acc-body">
+          <p class="settings-hint">Zmień nazwy kolumn na tablicy Deals. Klienci automatycznie przechodzą pod nową nazwę.</p>
+          <div id="settings-stages-list"></div>
+          <button class="btn btn-primary" id="btn-save-stages">Zapisz nazwy etapów</button>
+        </div>
       </div>
-      <div class="settings-section">
-        <h3>Automatyczne kopie bezpieczeństwa</h3>
-        <p class="settings-hint">System sam tworzy migawki bazy (co 10 minut, przy starcie, przed usunięciem klienta i przed importem).</p>
-        <button class="btn btn-ghost" id="btn-load-snapshots">Pokaż dostępne kopie</button>
-        <div class="admin-list" id="snapshots-list"></div>
+      <div class="settings-section settings-accordion">
+        <button type="button" class="settings-acc-head">
+          <span class="settings-acc-title">Automatyczne kopie bezpieczeństwa</span>
+          <span class="settings-acc-arrow">▾</span>
+        </button>
+        <div class="settings-acc-body">
+          <p class="settings-hint">System sam tworzy migawki bazy (co 24 h)</p>
+          <button class="btn btn-ghost" id="btn-load-snapshots">Pokaż dostępne kopie</button>
+          <div class="admin-list" id="snapshots-list"></div>
+        </div>
       </div>
-      <div class="settings-section">
-        <h3>Kopia zapasowa danych</h3>
-        <p class="settings-hint">Pobierz plik z kopią klientów i akcji, albo przywróć dane z pliku.</p>
-        <div class="settings-row">
-          <button class="btn btn-ghost" id="btn-export-backup">Pobierz kopię zapasową</button>
-          <label class="btn btn-ghost" for="import-backup-input" style="cursor:pointer;">Przywróć z pliku</label>
-          <input type="file" id="import-backup-input" accept="application/json" style="display:none;" />
+      <div class="settings-section settings-accordion">
+        <button type="button" class="settings-acc-head">
+          <span class="settings-acc-title">Kopia zapasowa danych</span>
+          <span class="settings-acc-arrow">▾</span>
+        </button>
+        <div class="settings-acc-body">
+          <p class="settings-hint">Pobierz plik z kopią klientów i akcji, albo przywróć dane z pliku.</p>
+          <div class="settings-row">
+            <button class="btn btn-ghost" id="btn-export-backup">Pobierz kopię zapasową</button>
+            <label class="btn btn-ghost" for="import-backup-input" style="cursor:pointer;">Przywróć z pliku</label>
+            <input type="file" id="import-backup-input" accept="application/json" style="display:none;" />
+          </div>
         </div>
       </div>
     </section>
@@ -295,10 +321,10 @@
         <div class="field" id="stats-quarter-wrap" style="display:none;">
           <label for="stats-quarter">Kwartał</label>
           <select id="stats-quarter">
-            <option value="1">Q1 (sty-mar)</option>
-            <option value="2">Q2 (kwi-cze)</option>
-            <option value="3">Q3 (lip-wrz)</option>
-            <option value="4">Q4 (paz-gru)</option>
+            <option value="1">Q1</option>
+            <option value="2">Q2</option>
+            <option value="3">Q3</option>
+            <option value="4">Q4</option>
           </select>
         </div>
       </div>
@@ -306,54 +332,84 @@
         <div class="stat-card">
           <div class="stat-label">Suma Prowizji Netto</div>
           <div class="stat-value" id="stat-agent-sum">—</div>
-          <div class="stat-hint">Suma udziału agenta ze wszystkich udanych transakcji</div>
+          <div class="stat-hint">Suma udziału agenta</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Łączny przychód wygenerowany przez agenta</div>
+          <div class="stat-label">Łączny przychód</div>
           <div class="stat-value" id="stat-revenue-sum">—</div>
-          <div class="stat-hint">Suma prowizji agencji ze wszystkich udanych transakcji</div>
+          <div class="stat-hint">Suma prowizji agencji</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Suma Podatków (15%)</div>
           <div class="stat-value" id="stat-tax-sum">—</div>
-          <div class="stat-hint">Suma podatku odprowadzonego od udziału agenta</div>
+          <div class="stat-hint">Podatek od udziału agenta</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Średnia wartość prowizji na transakcję</div>
+          <div class="stat-label">Średnia prowizja</div>
           <div class="stat-value" id="stat-avg-net">—</div>
-          <div class="stat-hint">Średnia z Do wypłaty na udaną transakcję</div>
+          <div class="stat-hint">Średnia na transakcję</div>
         </div>
       </div>
       <div class="stats-grid" style="margin-top:16px;">
         <div class="stat-card">
           <div class="stat-label">Skuteczność</div>
           <div class="stat-value" id="stat-conversion">—</div>
-          <div class="stat-hint">Udane transakcje / wszystkie dodane leady</div>
+          <div class="stat-hint">Udane / wszystkie leady</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Liczba udanych transakcji</div>
           <div class="stat-value" id="stat-won-count">—</div>
-          <div class="stat-hint">Z sekcji Closed Deals - Udana</div>
+          <div class="stat-hint">Closed Deals - Udana</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Średni czas transakcji</div>
           <div class="stat-value" id="stat-avg-days">—</div>
-          <div class="stat-hint">Od dodania leada do finalizacji</div>
+          <div class="stat-hint">Od leada do finalizacji</div>
         </div>
       </div>
       <div class="chart-card">
         <h3 class="chart-title">Transakcje i skuteczność w miesiącach</h3>
-        <p class="settings-hint">Słupki: liczba udanych transakcji w danym miesiącu. Pod spodem: skuteczność.</p>
+        <p class="settings-hint">Słupki: liczba udanych transakcji. Pod spodem: skuteczność.</p>
         <div class="chart-wrap" id="stats-chart"></div>
       </div>
       <p class="stats-count" id="stats-count"></p>
+    </section>
+
+    <section id="view-planner" class="view">
+      <header class="view-header">
+        <div>
+          <h1>Your Planner</h1>
+          <p class="subtitle">Zadania i cele: dzienne, tygodniowe, miesięczne i roczne</p>
+        </div>
+        <button class="btn btn-primary" id="btn-new-task">+ Nowe zadanie</button>
+      </header>
+      <div class="planner-toolbar">
+        <div class="planner-scopes">
+          <button class="planner-scope active" data-scope="daily">Dzienne</button>
+          <button class="planner-scope" data-scope="weekly">Tygodniowe</button>
+          <button class="planner-scope" data-scope="monthly">Miesięczne</button>
+          <button class="planner-scope" data-scope="yearly">Roczne</button>
+        </div>
+        <div class="planner-modes">
+          <button class="planner-mode active" data-mode="calendar">Kalendarz</button>
+          <button class="planner-mode" data-mode="list">Lista</button>
+        </div>
+      </div>
+      <div class="planner-daynav" id="planner-daynav">
+        <button class="btn btn-ghost" id="planner-prev">←</button>
+        <div class="planner-day-label" id="planner-day-label"></div>
+        <button class="btn btn-ghost" id="planner-next">→</button>
+        <button class="btn btn-ghost" id="planner-today">Dziś</button>
+      </div>
+      <div id="planner-calendar" class="planner-calendar"></div>
+      <div id="planner-list" class="planner-list" style="display:none;"></div>
     </section>
 
     <section id="view-research" class="view">
       <header class="view-header">
         <div>
           <h1><span class="premium-glow-text">Fast Research</span></h1>
-          <p class="subtitle">Automatyczne dopasowanie mieszkań z inwestycji do preferencji klienta</p>
+          <p class="subtitle">Automatyczne dopasowanie mieszkań do preferencji klienta</p>
         </div>
       </header>
       <div class="research-panel">
@@ -380,7 +436,7 @@
       </header>
       <div class="settings-section">
         <h3>Linki do stron deweloperów</h3>
-        <p class="settings-hint">System pobierze treść tych stron podczas wyszukiwania dopasowań.</p>
+        <p class="settings-hint">System pobierze treść tych stron podczas wyszukiwania.</p>
         <div class="field-row">
           <div class="field">
             <label for="admin-link-label">Nazwa (opcjonalnie)</label>
@@ -396,7 +452,7 @@
       </div>
       <div class="settings-section">
         <h3>PDF z listą inwestycji</h3>
-        <p class="settings-hint">Wgraj PDF zawierający listę mieszkań / inwestycji.</p>
+        <p class="settings-hint">Wgraj PDF z listą mieszkań.</p>
         <label class="btn btn-ghost" for="admin-pdf-input" style="cursor:pointer;">Wgraj PDF</label>
         <input type="file" id="admin-pdf-input" accept="application/pdf" style="display:none;" />
         <div class="admin-list" id="admin-pdfs-list"></div>
@@ -414,44 +470,17 @@
     </div>
     <form id="form-lead">
       <input type="hidden" id="lead-id" />
-      <div class="field">
-        <label for="lead-imie">Imię *</label>
-        <input type="text" id="lead-imie" required />
-      </div>
-      <div class="field">
-        <label for="lead-nazwisko">Nazwisko *</label>
-        <input type="text" id="lead-nazwisko" required />
-      </div>
-      <div class="field">
-        <label for="lead-mail">Mail</label>
-        <input type="email" id="lead-mail" />
-      </div>
-      <div class="field">
-        <label for="lead-telefon">Telefon</label>
-        <input type="tel" id="lead-telefon" />
-      </div>
-      <div class="field">
-        <label for="lead-preferencje">Preferencje</label>
-        <textarea id="lead-preferencje" rows="3" placeholder="np. preferowany kontakt, budżet..."></textarea>
-      </div>
-      <div class="field">
-        <label for="lead-inwestycja">Inwestycja</label>
-        <input type="text" id="lead-inwestycja" placeholder="np. nazwa inwestycji / osiedla" />
-      </div>
+      <div class="field"><label for="lead-imie">Imię *</label><input type="text" id="lead-imie" required /></div>
+      <div class="field"><label for="lead-nazwisko">Nazwisko *</label><input type="text" id="lead-nazwisko" required /></div>
+      <div class="field"><label for="lead-mail">Mail</label><input type="email" id="lead-mail" /></div>
+      <div class="field"><label for="lead-telefon">Telefon</label><input type="tel" id="lead-telefon" /></div>
+      <div class="field"><label for="lead-preferencje">Preferencje</label><textarea id="lead-preferencje" rows="3"></textarea></div>
+      <div class="field"><label for="lead-inwestycja">Inwestycja</label><input type="text" id="lead-inwestycja" /></div>
       <div class="field-row">
-        <div class="field">
-          <label for="lead-cena">Cena nieruchomości</label>
-          <input type="number" id="lead-cena" min="0" step="0.01" placeholder="np. 650000" />
-        </div>
-        <div class="field">
-          <label for="lead-prowizja-procent">Prowizja (%)</label>
-          <input type="number" id="lead-prowizja-procent" min="0" step="0.1" placeholder="np. 1.6" />
-        </div>
+        <div class="field"><label for="lead-cena">Cena nieruchomości</label><input type="number" id="lead-cena" min="0" step="0.01" /></div>
+        <div class="field"><label for="lead-prowizja-procent">Prowizja (%)</label><input type="number" id="lead-prowizja-procent" min="0" step="0.1" /></div>
       </div>
-      <div class="field" id="lead-stage-field">
-        <label for="lead-stage">Etap</label>
-        <select id="lead-stage"></select>
-      </div>
+      <div class="field" id="lead-stage-field"><label for="lead-stage">Etap</label><select id="lead-stage"></select></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" data-close="modal-lead">Anuluj</button>
         <button type="submit" class="btn btn-primary">Zapisz</button>
@@ -468,22 +497,10 @@
     </div>
     <form id="form-action">
       <input type="hidden" id="action-client-id" />
-      <div class="field">
-        <label>Klient</label>
-        <div class="static-value" id="action-client-name"></div>
-      </div>
-      <div class="field">
-        <label for="action-name">Nazwa akcji *</label>
-        <input type="text" id="action-name" placeholder="np. Zadzwonić..." required />
-      </div>
-      <div class="field">
-        <label for="action-date">Data *</label>
-        <input type="date" id="action-date" required />
-      </div>
-      <div class="field">
-        <label for="action-notes">Notatki</label>
-        <textarea id="action-notes" rows="3" placeholder="Dodatkowe informacje..."></textarea>
-      </div>
+      <div class="field"><label>Klient</label><div class="static-value" id="action-client-name"></div></div>
+      <div class="field"><label for="action-name">Nazwa akcji *</label><input type="text" id="action-name" required /></div>
+      <div class="field"><label for="action-date">Data *</label><input type="date" id="action-date" required /></div>
+      <div class="field"><label for="action-notes">Notatki</label><textarea id="action-notes" rows="3"></textarea></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" data-close="modal-action">Anuluj</button>
         <button type="submit" class="btn btn-primary">Zapisz akcję</button>
@@ -497,7 +514,7 @@
     <div class="modal-header">
       <h2>Dane klienta</h2>
       <div style="display:flex; gap:6px; align-items:center;">
-        <button class="modal-icon-btn modal-icon-danger" id="client-view-delete-btn" title="Usuń zamkniętą transakcję" style="display:none;">🗑</button>
+        <button class="modal-icon-btn modal-icon-danger" id="client-view-delete-btn" title="Usuń" style="display:none;">🗑</button>
         <button class="modal-close" data-close="modal-client-view">✕</button>
       </div>
     </div>
@@ -526,8 +543,61 @@
   <div class="modal research-warning-modal">
     <div class="research-warning-icon">!</div>
     <h2 class="research-warning-title">Klient musi zmienić preferencje</h2>
-    <p class="research-warning-text">Nie znaleziono ofert dopasowanych w co najmniej 90% do podanych kryteriów. Poniżej propozycje alternatywne (60-89% dopasowania).</p>
-    <button type="button" class="btn btn-primary" data-close="modal-research-warning">Rozumiem, pokaż alternatywy</button>
+    <p class="research-warning-text">Nie znaleziono ofert dopasowanych w co najmniej 90%. Poniżej alternatywy (60-89%).</p>
+    <button type="button" class="btn btn-primary" data-close="modal-research-warning">Rozumiem</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-task">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="task-modal-title">Nowe zadanie</h2>
+      <button class="modal-close" data-close="modal-task">✕</button>
+    </div>
+    <form id="form-task">
+      <input type="hidden" id="task-id" />
+      <div class="field"><label for="task-title">Nazwa zadania *</label><input type="text" id="task-title" required /></div>
+      <div class="field">
+        <label for="task-scope">Rodzaj</label>
+        <select id="task-scope">
+          <option value="daily">Zadanie dzienne</option>
+          <option value="weekly">Cel tygodniowy</option>
+          <option value="monthly">Cel miesięczny</option>
+          <option value="yearly">Cel roczny</option>
+        </select>
+      </div>
+      <div class="field-row" id="task-time-row">
+        <div class="field"><label for="task-date">Data</label><input type="date" id="task-date" /></div>
+        <div class="field"><label for="task-start">Od</label><input type="time" id="task-start" /></div>
+        <div class="field"><label for="task-end">Do</label><input type="time" id="task-end" /></div>
+      </div>
+      <div class="field">
+        <label for="task-recurrence">Powtarzanie</label>
+        <select id="task-recurrence">
+          <option value="none">Jednorazowe</option>
+          <option value="daily">Codziennie</option>
+          <option value="weekly">W wybrane dni tygodnia</option>
+        </select>
+      </div>
+      <div class="field" id="task-weekdays-wrap" style="display:none;">
+        <label>Dni tygodnia</label>
+        <div class="weekday-picker" id="task-weekdays">
+          <label class="weekday-opt"><input type="checkbox" value="1" /><span>Pn</span></label>
+          <label class="weekday-opt"><input type="checkbox" value="2" /><span>Wt</span></label>
+          <label class="weekday-opt"><input type="checkbox" value="3" /><span>Śr</span></label>
+          <label class="weekday-opt"><input type="checkbox" value="4" /><span>Cz</span></label>
+          <label class="weekday-opt"><input type="checkbox" value="5" /><span>Pt</span></label>
+          <label class="weekday-opt"><input type="checkbox" value="6" /><span>Sb</span></label>
+          <label class="weekday-opt"><input type="checkbox" value="0" /><span>Nd</span></label>
+        </div>
+      </div>
+      <div class="field"><label for="task-notes">Notatki</label><textarea id="task-notes" rows="2"></textarea></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-danger" id="task-delete-btn" style="display:none; margin-right:auto;">Usuń</button>
+        <button type="button" class="btn btn-ghost" data-close="modal-task">Anuluj</button>
+        <button type="submit" class="btn btn-primary">Zapisz</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -539,28 +609,13 @@
     </div>
     <form id="form-meeting">
       <input type="hidden" id="meeting-id" />
-      <div class="field">
-        <label for="meeting-client">Klient *</label>
-        <select id="meeting-client" required></select>
-      </div>
-      <div class="field">
-        <label for="meeting-title">Nazwa spotkania / akcji *</label>
-        <input type="text" id="meeting-title" placeholder="np. Spotkanie handlowe" required />
-      </div>
+      <div class="field"><label for="meeting-client">Klient *</label><select id="meeting-client" required></select></div>
+      <div class="field"><label for="meeting-title">Nazwa spotkania *</label><input type="text" id="meeting-title" required /></div>
       <div class="field-row">
-        <div class="field">
-          <label for="meeting-date">Data *</label>
-          <input type="date" id="meeting-date" required />
-        </div>
-        <div class="field">
-          <label for="meeting-time">Godzina</label>
-          <input type="time" id="meeting-time" />
-        </div>
+        <div class="field"><label for="meeting-date">Data *</label><input type="date" id="meeting-date" required /></div>
+        <div class="field"><label for="meeting-time">Godzina</label><input type="time" id="meeting-time" /></div>
       </div>
-      <div class="field">
-        <label for="meeting-notes">Notatki</label>
-        <textarea id="meeting-notes" rows="3" placeholder="Dodatkowe informacje..."></textarea>
-      </div>
+      <div class="field"><label for="meeting-notes">Notatki</label><textarea id="meeting-notes" rows="3"></textarea></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-danger" id="meeting-delete-btn" style="display:none; margin-right:auto;">Usuń</button>
         <button type="button" class="btn btn-ghost" data-close="modal-meeting">Anuluj</button>
