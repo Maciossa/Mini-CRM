@@ -103,6 +103,7 @@
       <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span> Settings</button>
       <button class="nav-item" data-view="statistics"><span class="nav-icon">◈</span> Statistics</button>
       <button class="nav-item" data-view="planner"><span class="nav-icon">✓</span> Your Planner</button>
+      <button class="nav-item" data-view="practice"><span class="nav-icon">▶</span> Practice</button>
       <button class="nav-item nav-item-premium" data-view="research"><span class="nav-icon">✦</span> <span class="premium-glow-text">Fast Research</span></button>
     </div>
     <button class="nav-item nav-item-admin" data-view="admin" id="btn-nav-admin" style="display:none;"><span class="nav-icon">🛠</span> Admin Panel</button>
@@ -405,6 +406,48 @@
       <div id="planner-list" class="planner-list" style="display:none;"></div>
     </section>
 
+    <section id="view-practice" class="view">
+      <header class="view-header">
+        <div>
+          <h1>Practice</h1>
+          <p class="subtitle">Twoje skrypty rozmów i Straight Line do prowadzenia rozmowy na żywo</p>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-ghost" id="btn-improve-script">Ulepsz skrypt (AI)</button>
+          <button class="btn btn-primary" id="btn-save-practice">Zapisz skrypt</button>
+        </div>
+      </header>
+      <div class="practice-tabs">
+        <button class="practice-tab active" data-ptype="coldcall">Cold Call</button>
+        <button class="practice-tab" data-ptype="meeting">Spotkanie</button>
+      </div>
+      <div class="sl-card">
+        <div class="sl-head">
+          <h3 class="chart-title">Straight Line — etap rozmowy</h3>
+          <button class="btn-small" id="btn-edit-line">Ustaw etapy</button>
+        </div>
+        <p class="settings-hint">Przeciągnij banknot wzdłuż linii, żeby oznaczyć, na którym etapie jesteś. Możesz też kliknąć w kropkę etapu.</p>
+        <div class="sl-wrap" id="sl-wrap">
+          <div class="sl-track" id="sl-track">
+            <div class="sl-line"></div>
+            <div class="sl-arrow">▶</div>
+            <div class="sl-points" id="sl-points"></div>
+            <div class="sl-marker" id="sl-marker" title="Przeciągnij mnie">💵</div>
+          </div>
+        </div>
+        <div class="sl-current" id="sl-current"></div>
+        <div class="sl-editor" id="sl-editor" style="display:none;">
+          <div class="field">
+            <label for="sl-input">Etapy linii (oddziel przecinkiem)</label>
+            <input type="text" id="sl-input" />
+          </div>
+          <button class="btn btn-primary" id="btn-save-line">Zapisz etapy</button>
+        </div>
+      </div>
+      <div id="practice-stages"></div>
+      <div id="practice-review"></div>
+    </section>
+
     <section id="view-research" class="view">
       <header class="view-header">
         <div>
@@ -630,3 +673,4 @@
 <script src="app.js"></script>
 </body>
 </html>
+
