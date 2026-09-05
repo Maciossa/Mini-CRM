@@ -1749,3 +1749,170 @@ $$('.settings-acc-head').forEach((head, i) => {
     head.classList.toggle('open', !isOpen);
   });
 });
+
+
+// ==== PRACTICE: skrypty rozmow + Straight Line ====
+let practiceData = null;
+let practiceType = 'coldcall';
+
+function currentPractice() {
+  return practiceData ? practiceData[practiceType] : null;
+}
+
+async function loadPractice() {
+  try { practiceData = await api('/practice'); } catch (err) { toast(err.message); return; }
+  renderPractice();
+}
+
+function renderPractice() {
+  const p = currentPractice();
+  if (!p) return;
+  renderStraightLine();
+  renderPracticeStages();
+  $('#practice-review').innerHTML = '';
+}
+
+function renderPracticeStages() {
+  const p = currentPractice();
+  const box = $('#practice-stages');
+  if (!box) return;
+  box.innerHTML = p.stages.map(function (st, i) {
+    return '<div class="script-stage"><div class="script-stage-head"><span class="script-stage-num">' + (i + 1) + '</span><input type="text" class="script-stage-title" data-i="' + i + '" value="' + escapeHtml(st.title) + '" /></div><div class="script-stage-body"><div class="script-col"><label>Skrypt rozmowy</label><textarea class="script-text" data-i="' + i + '" rows="7">' + escapeHtml(st.script) + '</textarea></div><div class="script-col script-col-prio"><label>Priorytety / kamienie milowe</label><textarea class="script-prio" data-i="' + i + '" rows="7">' + escapeHtml(st.priorities) + '</textarea></div></div></div>';
+  }).join('');
+}
+
+function collectPracticeFromForm() {
+  const p = currentPractice();
+  $$('.script-stage-title').forEach(function (inp) { p.stages[Number(inp.dataset.i)].title = inp.value; });
+  $$('.script-text').forEach(function (t) { p.stages[Number(t.dataset.i)].script = t.value; });
+  $$('.script-prio').forEach(function (t) { p.stages[Number(t.dataset.i)].priorities = t.value; });
+  return p;
+}
+
+function renderStraightLine() {
+  const p = currentPractice();
+  const pts = $('#sl-points');
+  if (!pts) return;
+  const n = p.lineStages.length;
+  pts.innerHTML = p.lineStages.map(function (name, i) {
+    const left = n === 1 ? 0 : (i / (n - 1)) * 100;
+    return '<div class="sl-point ' + (i <= p.markerIndex ? 'passed' : '') + '" data-i="' + i + '" style="left:' + left + '%"><span class="sl-dot"></span><span class="sl-label">' + escapeHtml(name) + '</span></div>';
+  }).join('');
+  positionMarker();
+  $('#sl-current').textContent = 'Jestes na etapie: ' + (p.lineStages[p.markerIndex] || '-');
+  $$('.sl-point').forEach(function (pt) { pt.addEventListener('click', function () { setMarker(Number(pt.dataset.i)); }); });
+}
+
+function positionMarker() {
+  const p = currentPractice();
+  const marker = $('#sl-marker');
+  if (!marker) return;
+  const n = p.lineStages.length;
+  marker.style.left = (n === 1 ? 0 : (p.markerIndex / (n - 1)) * 100) + '%';
+}
+
+async function setMarker(i, save) {
+  if (save === undefined) save = true;
+  const p = currentPractice();
+  p.markerIndex = Math.max(0, Math.min(p.lineStages.length - 1, i));
+  renderStraightLine();
+  if (save) {
+    try { await api('/practice', { method: 'PUT', body: JSON.stringify({ type: practiceType, markerIndex: p.markerIndex }) }); } catch (err) { }
+  }
+}
+
+(function initMarkerDrag() {
+  const marker = $('#sl-marker');
+  const track = $('#sl-track');
+  if (!marker || !track) return;
+  let dragging = false;
+  function moveTo(clientX) {
+    const p = currentPractice();
+    if (!p) return;
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const n = p.lineStages.length;
+    marker.style.left = (ratio * 100) + '%';
+    return n === 1 ? 0 : Math.round(ratio * (n - 1));
+  }
+  function start(e) { dragging = true; marker.classList.add('dragging'); e.preventDefault(); }
+  function move(e) { if (!dragging) return; moveTo(e.touches ? e.touches[0].clientX : e.clientX); }
+  function end(e) {
+    if (!dragging) return;
+    dragging = false;
+    marker.classList.remove('dragging');
+    const x = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+    const idx = moveTo(x);
+    if (idx !== undefined) setMarker(idx);
+  }
+  marker.addEventListener('mousedown', start);
+  marker.addEventListener('touchstart', start, { passive: false });
+  document.addEventListener('mousemove', move);
+  document.addEventListener('touchmove', move, { passive: false });
+  document.addEventListener('mouseup', end);
+  document.addEventListener('touchend', end);
+})();
+
+$('#btn-edit-line').addEventListener('click', function () {
+  const ed = $('#sl-editor');
+  const open = ed.style.display !== 'none';
+  ed.style.display = open ? 'none' : 'block';
+  if (!open) $('#sl-input').value = currentPractice().lineStages.join(', ');
+});
+
+$('#btn-save-line').addEventListener('click', async function () {
+  const raw = $('#sl-input').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  if (!raw.length) { toast('Podaj przynajmniej jeden etap.'); return; }
+  const p = currentPractice();
+  try {
+    const saved = await api('/practice', { method: 'PUT', body: JSON.stringify({ type: practiceType, lineStages: raw, markerIndex: Math.min(p.markerIndex, raw.length - 1) }) });
+    p.lineStages = saved.lineStages;
+    p.markerIndex = saved.markerIndex;
+    $('#sl-editor').style.display = 'none';
+    renderStraightLine();
+    toast('Etapy linii zapisane.');
+  } catch (err) { toast(err.message); }
+});
+
+$$('.practice-tab').forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    $$('.practice-tab').forEach(function (t) { t.classList.remove('active'); });
+    tab.classList.add('active');
+    practiceType = tab.dataset.ptype;
+    renderPractice();
+  });
+});
+
+$('#btn-save-practice').addEventListener('click', async function () {
+  const p = collectPracticeFromForm();
+  try {
+    await api('/practice', { method: 'PUT', body: JSON.stringify({ type: practiceType, stages: p.stages, lineStages: p.lineStages, markerIndex: p.markerIndex }) });
+    toast('Skrypt zapisany.');
+  } catch (err) { toast(err.message); }
+});
+
+$('#btn-improve-script').addEventListener('click', async function () {
+  const btn = $('#btn-improve-script');
+  const out = $('#practice-review');
+  const p = collectPracticeFromForm();
+  btn.disabled = true;
+  btn.textContent = 'Analizuje...';
+  out.innerHTML = '';
+  try {
+    await api('/practice', { method: 'PUT', body: JSON.stringify({ type: practiceType, stages: p.stages, lineStages: p.lineStages, markerIndex: p.markerIndex }) });
+    const data = await api('/practice/improve', { method: 'POST', body: JSON.stringify({ type: practiceType }) });
+    const badge = data.source === 'ai' ? '<span class="review-badge review-ai">Analiza AI</span>' : '<span class="review-badge review-heur">Analiza regulowa</span>';
+    out.innerHTML = '<div class="review-card"><div class="review-head">' + badge + '<h3 class="chart-title">Co poprawic w skrypcie</h3></div><p class="review-overall">' + escapeHtml(data.overall || '') + '</p>' + data.reviews.map(function (r) {
+      return '<div class="review-stage"><div class="review-stage-title">' + escapeHtml(r.stage) + '</div>' + ((r.tips || []).length ? '<ul class="review-tips">' + r.tips.map(function (t) { return '<li>' + escapeHtml(t) + '</li>'; }).join('') + '</ul>' : '<div class="review-none">Brak uwag do tego etapu.</div>') + ((r.good || []).length ? '<ul class="review-good">' + r.good.map(function (t) { return '<li>' + escapeHtml(t) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
+    }).join('') + '</div>';
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ulepsz skrypt (AI)';
+  }
+});
+
+$$('.nav-item').forEach(function (btn) {
+  if (btn.dataset.view === 'practice') btn.addEventListener('click', function () { loadPractice(); });
+});
