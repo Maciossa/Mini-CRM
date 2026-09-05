@@ -1060,3 +1060,49 @@ html[data-theme="dark"] .planner-modes { background: #232939; }
 html[data-theme="dark"] .goal-card { background: #232939; }
 html[data-theme="dark"] .weekday-opt { background: #232939; }
 html[data-theme="dark"] .settings-acc-head:hover { background: #232939; }
+
+.practice-tabs { display: flex; gap: 6px; background: #EEF0F5; padding: 4px; border-radius: 10px; margin-bottom: 18px; width: fit-content; }
+.practice-tab { border: none; background: transparent; color: var(--text-muted); padding: 8px 20px; border-radius: 7px; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.practice-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.sl-card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px 24px 26px; margin-bottom: 22px; }
+.sl-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sl-wrap { padding: 34px 30px 46px; }
+.sl-track { position: relative; height: 4px; }
+.sl-line { position: absolute; inset: 0; background: linear-gradient(to right, var(--gold), var(--gold-dark)); border-radius: 2px; }
+.sl-arrow { position: absolute; right: -22px; top: 50%; transform: translateY(-50%); color: var(--gold-dark); font-size: 17px; }
+.sl-points { position: absolute; inset: 0; }
+.sl-point { position: absolute; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+.sl-dot { width: 15px; height: 15px; border-radius: 50%; background: var(--surface); border: 3px solid var(--border); transition: all .15s; }
+.sl-point.passed .sl-dot { background: var(--gold); border-color: var(--gold-dark); }
+.sl-point:hover .sl-dot { transform: scale(1.25); }
+.sl-label { position: absolute; top: 22px; font-size: 11.5px; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+.sl-point.passed .sl-label { color: var(--text); }
+.sl-marker { position: absolute; top: -26px; transform: translateX(-50%); font-size: 26px; cursor: grab; user-select: none; transition: left .18s; }
+.sl-marker.dragging { cursor: grabbing; transition: none; }
+.sl-current { font-size: 13px; font-weight: 600; color: var(--gold-dark); margin-top: 6px; }
+.sl-editor { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.script-stage { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 22px; margin-bottom: 14px; }
+.script-stage-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.script-stage-num { width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; background: var(--gold); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 700; }
+.script-stage-title { flex: 1; border: none; border-bottom: 1px solid transparent; background: transparent; font-size: 15px; font-weight: 700; color: var(--text); padding: 4px 0; }
+.script-stage-title:hover { border-bottom-color: var(--border); }
+.script-stage-title:focus { outline: none; border-bottom-color: var(--gold); }
+.script-stage-body { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
+.script-col label { display: block; font-size: 11.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.script-col textarea { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.55; font-family: inherit; color: var(--text); background: var(--surface); resize: vertical; }
+.script-col textarea:focus { outline: none; border-color: var(--gold); }
+.script-col-prio textarea { background: #FFFDF6; }
+.review-card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px 24px; margin-top: 18px; }
+.review-head { display: flex; align-items: center; gap: 10px; }
+.review-badge { font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .04em; }
+.review-ai { background: rgba(126,182,255,.18); color: #1a56db; }
+.review-heur { background: rgba(201,150,46,.18); color: var(--gold-dark); }
+.review-overall { font-size: 13px; color: var(--text-muted); margin: 8px 0 16px; line-height: 1.55; }
+.review-stage { border-top: 1px solid var(--border); padding: 14px 0; }
+.review-stage-title { font-size: 13.5px; font-weight: 700; margin-bottom: 8px; }
+.review-tips, .review-good { margin: 0; padding-left: 20px; font-size: 12.8px; line-height: 1.6; }
+.review-tips li { color: var(--text); margin-bottom: 4px; }
+.review-good li { color: #15803D; margin-bottom: 4px; }
+.review-none { font-size: 12.5px; color: #15803D; }
+html[data-theme="dark"] .practice-tabs { background: #232939; }
+html[data-theme="dark"] .script-col-prio textarea { background: #2A2F1F; }
