@@ -994,3 +994,197 @@ try {
 } catch (e) {
   console.error('Nie udalo sie przesunac trasy catch-all:', e.message);
 }
+
+
+// ==== PRACTICE: skrypty rozmow (Cold Call / Spotkanie) + Straight Line ====
+db.defaults({ practiceScripts: [] }).write();
+
+const PRACTICE_TYPES = ['coldcall', 'meeting'];
+
+const DEFAULT_COLDCALL_STAGES = [
+  { key: 'open', title: 'Open call', script: '', priorities: '' },
+  { key: 'explain', title: 'Wyjasnienie', script: '', priorities: '' },
+  { key: 'needs', title: 'Badanie potrzeb (pytania)', script: '', priorities: '' },
+  { key: 'close', title: 'Zakonczenie - domkniecie na spotkanie', script: '', priorities: '' }
+];
+
+const DEFAULT_MEETING_STAGES = [
+  { key: 'open', title: 'Otwarcie spotkania', script: '', priorities: '' },
+  { key: 'discovery', title: 'Badanie potrzeb', script: '', priorities: '' },
+  { key: 'presentation', title: 'Prezentacja rozwiazania', script: '', priorities: '' },
+  { key: 'objections', title: 'Obiekcje', script: '', priorities: '' },
+  { key: 'close', title: 'Domkniecie', script: '', priorities: '' }
+];
+
+const DEFAULT_LINE_COLDCALL = ['Otwarcie', 'Wyjasnienie', 'Potrzeby', 'Domkniecie'];
+const DEFAULT_LINE_MEETING = ['Otwarcie', 'Potrzeby', 'Prezentacja', 'Obiekcje', 'Domkniecie'];
+
+function defaultPractice(type) {
+  return {
+    type: type,
+    stages: type === 'coldcall' ? JSON.parse(JSON.stringify(DEFAULT_COLDCALL_STAGES)) : JSON.parse(JSON.stringify(DEFAULT_MEETING_STAGES)),
+    lineStages: type === 'coldcall' ? DEFAULT_LINE_COLDCALL.slice() : DEFAULT_LINE_MEETING.slice(),
+    markerIndex: 0
+  };
+}
+
+app.use('/api/practice', requireProfile);
+
+app.get('/api/practice', function (req, res) {
+  const out = {};
+  PRACTICE_TYPES.forEach(function (type) {
+    const found = db.get('practiceScripts').find({ profile_id: req.profileId, type: type }).value();
+    out[type] = found ? { type: type, stages: found.stages, lineStages: found.lineStages, markerIndex: found.markerIndex || 0 } : defaultPractice(type);
+  });
+  res.json(out);
+});
+
+app.put('/api/practice', function (req, res) {
+  const type = req.body.type;
+  const stages = req.body.stages;
+  const lineStages = req.body.lineStages;
+  const markerIndex = req.body.markerIndex;
+  if (!PRACTICE_TYPES.includes(type)) {
+    return res.status(400).json({ error: 'Nieprawidlowy typ skryptu.' });
+  }
+  if (stages !== undefined && !Array.isArray(stages)) {
+    return res.status(400).json({ error: 'Etapy musza byc lista.' });
+  }
+  if (lineStages !== undefined) {
+    if (!Array.isArray(lineStages) || !lineStages.length) {
+      return res.status(400).json({ error: 'Linia musi miec przynajmniej jeden etap.' });
+    }
+    if (lineStages.some(function (s) { return !String(s || '').trim(); })) {
+      return res.status(400).json({ error: 'Nazwy etapow na linii nie moga byc puste.' });
+    }
+  }
+  const existing = db.get('practiceScripts').find({ profile_id: req.profileId, type: type }).value();
+  const base = existing || Object.assign({ id: uuidv4(), profile_id: req.profileId }, defaultPractice(type));
+  if (stages !== undefined) {
+    base.stages = stages.map(function (s) {
+      return {
+        key: String(s.key || '').trim() || uuidv4().slice(0, 8),
+        title: String(s.title || '').trim() || 'Etap',
+        script: String(s.script || ''),
+        priorities: String(s.priorities || '')
+      };
+    });
+  }
+  if (lineStages !== undefined) base.lineStages = lineStages.map(function (s) { return String(s).trim(); });
+  if (markerIndex !== undefined) {
+    const m = Number(markerIndex);
+    base.markerIndex = Number.isFinite(m) ? Math.max(0, Math.min(base.lineStages.length - 1, Math.round(m))) : 0;
+  }
+  base.updated_at = now();
+  if (existing) {
+    db.get('practiceScripts').find({ profile_id: req.profileId, type: type }).assign(base).write();
+  } else {
+    db.get('practiceScripts').push(base).write();
+  }
+  res.json({ type: type, stages: base.stages, lineStages: base.lineStages, markerIndex: base.markerIndex });
+});
+const FILLER_WORDS = ['tak jakby', 'w sumie', 'znaczy', 'yyy', 'jakby', 'no wiesz'];
+
+function heuristicReview(stage, type) {
+  const text = String(stage.script || '').trim();
+  const prio = String(stage.priorities || '').trim();
+  const tips = [];
+  const good = [];
+  if (!text) {
+    return { stage: stage.title, tips: ['Ten etap jest pusty - bez niego trudno prowadzic rozmowe wg planu.'], good: [] };
+  }
+  const words = text.split(/\s+/).length;
+  const sentences = text.split(/[.!?]+/).filter(function (s) { return s.trim(); }).length || 1;
+  const avgSentence = words / sentences;
+  const questions = (text.match(/\?/g) || []).length;
+  const key = stage.key || '';
+  if (words < 15) tips.push('Bardzo krotki fragment (' + words + ' slow) - rozwaz rozwiniecie.');
+  if (words > 220) tips.push('Dlugi fragment (' + words + ' slow). Klient wylacza sie po ~30 sekundach monologu - rozbij na krotsze wymiany.');
+  if (avgSentence > 25) tips.push('Srednie zdanie ma ' + avgSentence.toFixed(0) + ' slow - za dlugo jak na mowe. Skracaj do 12-18 slow.');
+  else if (words >= 15) good.push('Dlugosc zdan jest w porzadku dla rozmowy mowionej.');
+  const foundFillers = FILLER_WORDS.filter(function (f) { return text.toLowerCase().includes(f); });
+  if (foundFillers.length) tips.push('Wypelniacze do usuniecia: ' + foundFillers.join(', ') + '. Oslabiaja pewnosc siebie.');
+  if (key === 'open') {
+    if (!/dzien dobry|witam|czesc/i.test(text)) tips.push('Brakuje wyraznego powitania na starcie.');
+    if (!/nazywam sie|z tej strony|mowi /i.test(text)) tips.push('Nie przedstawiasz sie imieniem - rozmowa zaczyna sie anonimowo.');
+    if (!/chwil|moment|minut/i.test(text)) tips.push('Rozwaz pytanie o zgode na czas (Ma Pan chwile?) - obniza opor.');
+    if (questions === 0) tips.push('W otwarciu nie ma zadnego pytania - latwo wpasc w monolog.');
+  }
+  if (key === 'explain') {
+    if (!/poniewaz|dlatego|powodem|dzwonie w sprawie/i.test(text)) tips.push('Nie widac jasnego powodu telefonu. Podaj konkret: Dzwonie, poniewaz...');
+    if (/najlepsz|lider|numer 1|rewolucyjn/i.test(text)) tips.push('Superlatywy brzmia jak reklama. Zastap je konkretnym faktem lub liczba.');
+  }
+  if (key === 'needs' || key === 'discovery') {
+    if (questions < 3) tips.push('Tylko ' + questions + ' pytan w badaniu potrzeb. To najwazniejszy moment - celuj w 5-8 pytan otwartych.');
+    else good.push(questions + ' pytan - dobra podstawa do badania potrzeb.');
+    const openQ = (text.match(/\b(co|jak|dlaczego|kiedy|gdzie|jakie|czego)\b/gi) || []).length;
+    if (openQ < 2) tips.push('Przewage maja pytania zamkniete. Dodaj pytania otwarte (co / jak / dlaczego).');
+  }
+  if (key === 'presentation') {
+    if (!/dla Pan|dzieki temu|to oznacza|zyska/i.test(text)) tips.push('Prezentacja opisuje cechy, ale nie tlumaczy korzysci. Dodaj: dzieki temu Pan/Pani...');
+  }
+  if (key === 'objections') {
+    if (!/rozumiem|slusznie|to naturalne/i.test(text)) tips.push('Brakuje zbicia napiecia. Zacznij od uznania obiekcji (Rozumiem...).');
+  }
+  if (key === 'close') {
+    const hasConcrete = /poniedzialek|wtorek|sroda|czwartek|piatek|godzin|\d{1,2}:\d{2}|jutro|w tym tygodniu/i.test(text);
+    if (!hasConcrete) tips.push(type === 'coldcall' ? 'Domkniecie bez konkretnego terminu. Zaproponuj dwa warianty: wtorek 11:00 czy czwartek 15:00?' : 'Brakuje konkretnego nastepnego kroku z data.');
+    if (!/spotka/i.test(text) && type === 'coldcall') tips.push('Cel telefonu to spotkanie - nazwij to wprost.');
+    if (/moze|gdyby|ewentualnie|jesli by/i.test(text)) tips.push('Tryb przypuszczajacy oslabia domkniecie. Mow twierdzaco.');
+  }
+  if (!prio) tips.push('Nie masz zapisanych priorytetow dla tego etapu - trudno ocenic, czy zostal domkniety.');
+  else good.push('Priorytety uzupelnione - wiadomo, co musi pasc w tym etapie.');
+  return { stage: stage.title, tips: tips, good: good };
+}
+
+async function aiReview(stages, type) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  try {
+    const scriptText = stages.map(function (s) { return '### ' + s.title + '\nSKRYPT:\n' + (s.script || '(puste)') + '\nPRIORYTETY:\n' + (s.priorities || '(puste)'); }).join('\n\n');
+    const prompt = 'Jestes trenerem sprzedazy nieruchomosci. Ocen ponizszy skrypt ' + (type === 'coldcall' ? 'rozmowy cold call' : 'spotkania z klientem') + '. Dla kazdego etapu podaj maksymalnie 3 konkretne uwagi co poprawic i 1 rzecz ktora jest dobra. Odpowiedz WYLACZNIE w JSON: {"reviews":[{"stage":"nazwa","tips":["..."],"good":["..."]}],"overall":"2-3 zdania"}\n\n' + scriptText;
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const txt = (data.content || []).map(function (c) { return c.text || ''; }).join('').replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(txt);
+    if (!parsed.reviews) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+app.post('/api/practice/improve', async function (req, res) {
+  const type = req.body.type;
+  if (!PRACTICE_TYPES.includes(type)) {
+    return res.status(400).json({ error: 'Nieprawidlowy typ skryptu.' });
+  }
+  const found = db.get('practiceScripts').find({ profile_id: req.profileId, type: type }).value();
+  const stages = found ? found.stages : defaultPractice(type).stages;
+  if (!stages.some(function (s) { return String(s.script || '').trim(); })) {
+    return res.status(400).json({ error: 'Napisz najpierw choc jeden etap skryptu - nie ma czego analizowac.' });
+  }
+  const ai = await aiReview(stages, type);
+  if (ai) {
+    return res.json({ source: 'ai', reviews: ai.reviews, overall: ai.overall || '' });
+  }
+  const reviews = stages.map(function (s) { return heuristicReview(s, type); });
+  const totalTips = reviews.reduce(function (a, r) { return a + r.tips.length; }, 0);
+  const overall = totalTips === 0
+    ? 'Skrypt przeszedl wszystkie automatyczne testy. Kolejny krok to przecwiczenie go na glos.'
+    : 'Znaleziono ' + totalTips + ' rzeczy do poprawy. To analiza regulowa (dlugosc zdan, pytania, wypelniacze, konkret w domknieciu) - nie ocenia sensu tresci. Pelna analize jezykowa wlaczy klucz ANTHROPIC_API_KEY w ustawieniach Render.';
+  res.json({ source: 'heuristic', reviews: reviews, overall: overall });
+});
+
+try {
+  const layersP = app._router.stack;
+  const iP = layersP.findIndex(function (l) { return l.route && l.route.path === '*'; });
+  if (iP !== -1) layersP.push(layersP.splice(iP, 1)[0]);
+} catch (e) {
+  console.error('Nie udalo sie przesunac trasy catch-all:', e.message);
+}
