@@ -106,7 +106,6 @@
       <button class="nav-item" data-view="practice"><span class="nav-icon">▶</span> Practice</button>
       <button class="nav-item nav-item-premium" data-view="research"><span class="nav-icon">✦</span> <span class="premium-glow-text">Fast Research</span></button>
     </div>
-    <button class="nav-item nav-item-admin" data-view="admin" id="btn-nav-admin" style="display:none;"><span class="nav-icon">🛠</span> Admin Panel</button>
     <div class="sidebar-footer" id="sidebar-current-user"></div>
   </nav>
 
@@ -452,55 +451,60 @@
       <header class="view-header">
         <div>
           <h1><span class="premium-glow-text">Fast Research</span></h1>
-          <p class="subtitle">Automatyczne dopasowanie mieszkań do preferencji klienta</p>
+          <p class="subtitle">Dopasowanie mieszkań z Twojej listy inwestycji do preferencji klienta</p>
         </div>
+        <button class="btn btn-ghost" id="fr-restart" style="display:none;">Zacznij od nowa</button>
       </header>
-      <div class="research-panel">
-        <div class="field">
-          <label for="research-client-select">Wybierz klienta</label>
-          <select id="research-client-select"></select>
-        </div>
-        <div class="field">
-          <label for="research-preferences">Preferencje</label>
-          <textarea id="research-preferences" rows="4" placeholder="Wpisz Preferencje Klienta"></textarea>
-        </div>
-        <button class="btn btn-primary" id="btn-run-research">Uruchom Fast Research</button>
-        <p class="research-hint" id="research-source-hint"></p>
+
+      <div class="fr-steps">
+        <div class="fr-step active" data-step="1"><span class="fr-step-no">1</span> Klient i lista PDF</div>
+        <div class="fr-step" data-step="2"><span class="fr-step-no">2</span> Wybór inwestycji</div>
+        <div class="fr-step" data-step="3"><span class="fr-step-no">3</span> Research</div>
+        <div class="fr-step" data-step="4"><span class="fr-step-no">4</span> Raport</div>
       </div>
-      <div id="research-results"></div>
+
+      <div class="fr-panel" id="fr-step-1">
+        <div class="field">
+          <label for="fr-client">Klient</label>
+          <select id="fr-client"></select>
+        </div>
+        <div id="fr-prefs" class="fr-prefs"></div>
+        <div class="field">
+          <label for="fr-pdf-select">Lista inwestycji (PDF)</label>
+          <select id="fr-pdf-select"></select>
+        </div>
+        <div class="settings-row">
+          <label class="btn btn-ghost" for="fr-pdf-input" style="cursor:pointer;">Wgraj nowy PDF</label>
+          <input type="file" id="fr-pdf-input" accept="application/pdf" style="display:none;" />
+          <button class="btn btn-primary" id="fr-go-stage1">Dopasuj inwestycje</button>
+        </div>
+        <p class="settings-hint" id="fr-pdf-status"></p>
+      </div>
+
+      <div class="fr-panel" id="fr-step-2" style="display:none;">
+        <p class="settings-hint" id="fr-stage1-summary"></p>
+        <div id="fr-matched"></div>
+        <div id="fr-rejected"></div>
+        <div class="settings-row" style="margin-top:16px;">
+          <button class="btn btn-ghost" id="fr-back-1">← Wróć</button>
+          <button class="btn btn-primary" id="fr-go-stage2">Przejdź do etapu 2 →</button>
+        </div>
+      </div>
+
+      <div class="fr-panel" id="fr-step-3" style="display:none;">
+        <div class="fr-progress" id="fr-progress"></div>
+      </div>
+
+      <div class="fr-panel" id="fr-step-4" style="display:none;">
+        <div class="settings-row" style="margin-bottom:14px;">
+          <button class="btn btn-ghost" id="fr-back-2">← Wróć do inwestycji</button>
+          <button class="btn btn-ghost" id="fr-print">Drukuj / PDF</button>
+        </div>
+        <div id="fr-report"></div>
+      </div>
     </section>
 
-    <section id="view-admin" class="view">
-      <header class="view-header">
-        <div>
-          <h1>Admin Panel</h1>
-          <p class="subtitle">Źródła danych dla Fast Research</p>
-        </div>
-      </header>
-      <div class="settings-section">
-        <h3>Linki do stron deweloperów</h3>
-        <p class="settings-hint">System pobierze treść tych stron podczas wyszukiwania.</p>
-        <div class="field-row">
-          <div class="field">
-            <label for="admin-link-label">Nazwa (opcjonalnie)</label>
-            <input type="text" id="admin-link-label" placeholder="np. Osiedle Słoneczne" />
-          </div>
-          <div class="field">
-            <label for="admin-link-url">Link URL</label>
-            <input type="text" id="admin-link-url" placeholder="https://..." />
-          </div>
-        </div>
-        <button class="btn btn-primary" id="btn-add-developer-link">+ Dodaj link</button>
-        <div class="admin-list" id="admin-links-list"></div>
-      </div>
-      <div class="settings-section">
-        <h3>PDF z listą inwestycji</h3>
-        <p class="settings-hint">Wgraj PDF z listą mieszkań.</p>
-        <label class="btn btn-ghost" for="admin-pdf-input" style="cursor:pointer;">Wgraj PDF</label>
-        <input type="file" id="admin-pdf-input" accept="application/pdf" style="display:none;" />
-        <div class="admin-list" id="admin-pdfs-list"></div>
-      </div>
-    </section>
+    
 
   </main>
 </div>
