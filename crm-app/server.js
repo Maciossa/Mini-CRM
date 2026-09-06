@@ -18,7 +18,7 @@ async function extractPdfText(buffer) {
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
-    text += content.items.map(it => it.str).join(' ') + '\n';
+    text += content.items.map(it => it.str + (it.hasEOL ? '\n' : ' ')).join('') + '\n';
   }
   return text;
 }
@@ -86,11 +86,10 @@ const ADMIN_EMAILS = [
 
 db.defaults({
   clients: [],
+  researchPdfs: [],
   activities: [],
   accounts: [],
   profiles: [],
-  developerLinks: [],
-  investmentPdfs: [],
   researchReports: [],
   meta: {}
 }).write();
@@ -364,6 +363,22 @@ app.post('/api/clients', (req, res) => {
     cena_nieruchomosci: cena_nieruchomosci !== undefined && cena_nieruchomosci !== '' ? Number(cena_nieruchomosci) : null,
     prowizja_procent: prowizja_procent !== undefined && prowizja_procent !== '' ? Number(prowizja_procent) : null,
     stage: activeStages.includes(stage) ? stage : activeStages[0],
+    budget_min: null,
+    budget_max: null,
+    pref_locations: '',
+    max_transit_min: null,
+    rooms_min: null,
+    rooms_max: null,
+    area_min: null,
+    area_max: null,
+    floor_min: null,
+    floor_max: null,
+    needs_balcony: false,
+    needs_parking: false,
+    needs_elevator: false,
+    ready_by: '',
+    pref_notes: '',
+    pref_weights: null,
     deal_status: null,
     deal_month: null,
     deal_split: null,
@@ -378,7 +393,7 @@ app.post('/api/clients', (req, res) => {
 app.put('/api/clients/:id', (req, res) => {
   const client = db.get('clients').find({ id: req.params.id, profile_id: req.profileId }).value();
   if (!client) return res.status(404).json({ error: 'Nie znaleziono klienta.' });
-  const allowed = ['imie', 'nazwisko', 'mail', 'telefon', 'preferencje', 'stage', 'inwestycja', 'cena_nieruchomosci', 'prowizja_procent', 'deal_status', 'deal_month', 'deal_split'];
+  const allowed = ['imie', 'nazwisko', 'mail', 'telefon', 'preferencje', 'stage', 'inwestycja', 'cena_nieruchomosci', 'prowizja_procent', 'deal_status', 'deal_month', 'deal_split', 'budget_min', 'budget_max', 'pref_locations', 'max_transit_min', 'rooms_min', 'rooms_max', 'area_min', 'area_max', 'floor_min', 'floor_max', 'needs_balcony', 'needs_parking', 'needs_elevator', 'ready_by', 'pref_notes', 'pref_weights'];
   const updates = {};
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -422,6 +437,12 @@ app.put('/api/clients/:id', (req, res) => {
       updates.closed_at = null;
     }
   }
+  ['budget_min','budget_max','max_transit_min','rooms_min','rooms_max','area_min','area_max','floor_min','floor_max'].forEach(function (k) {
+    if (updates[k] !== undefined) updates[k] = (updates[k] === '' || updates[k] === null) ? null : Number(updates[k]);
+  });
+  ['needs_balcony','needs_parking','needs_elevator'].forEach(function (k) {
+    if (updates[k] !== undefined) updates[k] = Boolean(updates[k]);
+  });
   if (updates.cena_nieruchomosci !== undefined) {
     updates.cena_nieruchomosci = updates.cena_nieruchomosci === '' ? null : Number(updates.cena_nieruchomosci);
   }
@@ -563,306 +584,550 @@ app.post('/api/backup/snapshots/:file/restore', (req, res) => {
   }
 });
 
-app.use('/api/admin', requireProfile, requireAdmin);
+// ===========================================================================
+// FAST RESEARCH v2 — 3 etapy: PDF -> selekcja inwestycji -> research -> raport
+// Zasada nadrzędna: nigdy nie wychodzimy poza listę inwestycji z PDF.
+// ===========================================================================
+
 app.use('/api/research', requireProfile);
 
-app.get('/api/admin/developer-links', (req, res) => {
-  res.json(db.get('developerLinks').filter({ profile_id: req.profileId }).value());
-});
+// --- Parser PDF ------------------------------------------------------------
+// PDF-y deweloperskie nie mają jednego formatu, więc tniemy tekst na bloki
+// wokół nazw inwestycji i z każdego bloku wyciągamy tyle, ile się da.
+// Czego nie da się odczytać, zostaje null — nigdy nie zgadujemy.
 
-app.post('/api/admin/developer-links', (req, res) => {
-  const { url, label } = req.body;
-  if (!url) return res.status(400).json({ error: 'Link jest wymagany.' });
-  const link = {
-    id: uuidv4(),
-    profile_id: req.profileId,
-    url: String(url).trim(),
-    label: label ? String(label).trim() : '',
-    created_at: now()
+function parseMoney(str) {
+  if (!str) return null;
+  const n = Number(String(str).replace(/[^\d]/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function parseInvestmentsFromPdfText(text) {
+  const clean = String(text || '').replace(/\r/g, '');
+  if (!clean.trim()) return [];
+
+  // Blok = fragment zaczynający się od linii wyglądającej na nazwę inwestycji
+  // (Wielka litera, nie kończy się kropką, rozsądna długość).
+  const lines = clean.split('\n').map(l => l.trim());
+  const blocks = [];
+  let current = null;
+
+  // Linia "Etykieta: wartosc" to pole rekordu, nigdy nazwa inwestycji.
+  const isFieldLine = (l) => /^[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż ]{3,24}\s*:/.test(l);
+
+  const looksLikeName = (l) =>
+    l.length >= 3 && l.length <= 80 &&
+    /^[A-ZĄĆĘŁŃÓŚŹŻ]/.test(l) &&
+    !/^\d/.test(l) &&
+    !/[.;:]$/.test(l) &&
+    !isFieldLine(l) &&
+    !/^(https?:|www\.)/i.test(l) &&
+    !/^(lista|oferta|spis|zestawienie|strona)\b/i.test(l);
+
+  lines.forEach(function (l) {
+    if (!l) return;
+    if (looksLikeName(l)) {
+      if (current) blocks.push(current);
+      current = { name: l, body: [] };
+    } else if (current) {
+      current.body.push(l);
+    }
+  });
+  if (current) blocks.push(current);
+
+  // Pola czytamy w obrebie POJEDYNCZEJ linii - inaczej regex laczy sasiednie
+  // etykiety i "Deweloper" wchlania cala reszte rekordu.
+  const fieldValue = function (lines, labelRe) {
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(labelRe);
+      if (m) return (m[1] || '').trim();
+    }
+    return null;
   };
-  db.get('developerLinks').push(link).write();
-  res.status(201).json(link);
-});
+  const findInLines = function (lines, re) {
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(re);
+      if (m) return m;
+    }
+    return null;
+  };
 
-app.delete('/api/admin/developer-links/:id', (req, res) => {
-  db.get('developerLinks').remove({ id: req.params.id, profile_id: req.profileId }).write();
-  res.status(204).end();
-});
+  return blocks.map(function (b, i) {
+    const lines = b.body;
+    const all = b.name + ' ' + lines.join(' ');
 
-app.get('/api/admin/investment-pdfs', (req, res) => {
-  const list = db.get('investmentPdfs').filter({ profile_id: req.profileId })
-  .map(p => ({ id: p.id, filename: p.filename, created_at: p.created_at, chars: (p.text || '').length }))
-  .value();
-  res.json(list);
-});
+    const urlM = findInLines(lines, /https?:\/\/[^\s,;)]+/i) || findInLines(lines, /\bwww\.[a-z0-9-]+\.[a-z.]{2,}/i);
+    const dev = fieldValue(lines, /^(?:deweloper|inwestor)\s*[:\-]\s*(.+)$/i);
+    const loc = fieldValue(lines, /^(?:lokalizacja|adres|dzielnica)\s*[:\-]\s*(.+)$/i)
+             || fieldValue(lines, /^(ul\..+)$/i);
+    const priceRange = findInLines(lines, /([\d][\d\s]{4,})\s*(?:-|–|do)\s*([\d][\d\s]{4,})\s*(?:zł|zl|PLN)/i);
+    const pricePerM2 = findInLines(lines, /([\d][\d\s]{3,})\s*(?:zł|zl|PLN)\s*\/\s*m/i);
+    const areaRange = findInLines(lines, /(\d{1,3}(?:[.,]\d)?)\s*(?:-|–|do)\s*(\d{1,3}(?:[.,]\d)?)\s*m\s*2?\b/i);
+    const roomsRange = findInLines(lines, /pok\w*\s*[:\-]?\s*(\d)\s*(?:-|–|do)\s*(\d)/i)
+                    || findInLines(lines, /(\d)\s*(?:-|–|do)\s*(\d)\s*pok/i);
+    const readyM = findInLines(lines, /(?:termin|oddanie|realizacja|gotowe)\D{0,15}((?:I{1,4}|[1-4])\s*(?:kw|kwarta[łl])\w*\.?\s*)?(20\d{2})/i);
+    const transitM = findInLines(lines, /(\d{1,2})\s*min\D{0,25}(?:metro|tramwaj|autobus|przystan|przystań|komunikacj|SKM|kolej)/i)
+                  || findInLines(lines, /(?:metro|tramwaj|autobus|przystan|komunikacj)\D{0,25}(\d{1,2})\s*min/i);
 
-app.post('/api/admin/investment-pdfs', async (req, res) => {
+    return {
+      id: 'inv-' + (i + 1),
+      name: b.name,
+      developer: dev,
+      location: loc,
+      price_min: priceRange ? parseMoney(priceRange[1]) : null,
+      price_max: priceRange ? parseMoney(priceRange[2]) : null,
+      price_per_m2: pricePerM2 ? parseMoney(pricePerM2[1]) : null,
+      area_min: areaRange ? Number(areaRange[1].replace(',', '.')) : null,
+      area_max: areaRange ? Number(areaRange[2].replace(',', '.')) : null,
+      rooms_min: roomsRange ? Number(roomsRange[1]) : null,
+      rooms_max: roomsRange ? Number(roomsRange[2]) : null,
+      ready: readyM ? (readyM[1] ? (readyM[1].trim() + ' ' + readyM[2]) : readyM[2]) : null,
+      transit_min: transitM ? Number(transitM[1]) : null,
+      url: urlM ? (urlM[0].startsWith('http') ? urlM[0] : 'https://' + urlM[0]) : null,
+      raw: (b.name + '\n' + lines.join('\n')).slice(0, 1200)
+    };
+  }).filter(function (inv) {
+    return inv.developer || inv.location || inv.price_min || inv.price_per_m2 || inv.area_min || inv.rooms_min || inv.url;
+  });
+}
+
+app.post('/api/research/pdf', async (req, res) => {
   const { filename, base64 } = req.body;
-  if (!base64) return res.status(400).json({ error: 'Plik PDF (base64) jest wymagany.' });
+  if (!base64) return res.status(400).json({ error: 'Plik PDF jest wymagany.' });
   try {
     const buffer = Buffer.from(base64, 'base64');
     const text = await extractPdfText(buffer);
+    const investments = parseInvestmentsFromPdfText(text);
+    if (!investments.length) {
+      return res.status(422).json({ error: 'Nie udało się odczytać żadnej inwestycji z tego PDF. Upewnij się, że plik zawiera tekst (nie skan).' });
+    }
     const record = {
       id: uuidv4(),
       profile_id: req.profileId,
       filename: filename || 'inwestycje.pdf',
-      text: text || '',
+      text: text.slice(0, 400000),
+      investments: investments,
       created_at: now()
     };
-    db.get('investmentPdfs').push(record).write();
-    res.status(201).json({ id: record.id, filename: record.filename, created_at: record.created_at, chars: record.text.length });
+    db.get('researchPdfs').push(record).write();
+    const slim = investments.map(function (i) { const o = Object.assign({}, i); delete o.raw; return o; });
+    res.status(201).json({ id: record.id, filename: record.filename, created_at: record.created_at, count: slim.length, investments: slim });
   } catch (e) {
-    res.status(400).json({ error: 'Nie udalo sie odczytac PDF-a. Upewnij sie, ze to poprawny plik PDF.' });
+    res.status(400).json({ error: 'Nie udało się odczytać PDF-a: ' + e.message });
   }
 });
 
-app.delete('/api/admin/investment-pdfs/:id', (req, res) => {
-  db.get('investmentPdfs').remove({ id: req.params.id, profile_id: req.profileId }).write();
+app.get('/api/research/pdfs', (req, res) => {
+  const list = db.get('researchPdfs').filter({ profile_id: req.profileId })
+    .map(function (p) { return { id: p.id, filename: p.filename, created_at: p.created_at, count: (p.investments || []).length }; })
+    .value();
+  res.json(list);
+});
+
+app.delete('/api/research/pdfs/:id', (req, res) => {
+  db.get('researchPdfs').remove({ id: req.params.id, profile_id: req.profileId }).write();
   res.status(204).end();
 });
 
-function stripHtml(html) {
-  return String(html)
-  .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-  .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-  .replace(/<[^>]+>/g, ' ')
-  .replace(/&nbsp;/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim();
-}
+// --- ETAP 1: selekcja inwestycji z listy PDF -------------------------------
+// Twarde odrzucenie tylko wtedy, gdy dane z PDF JEDNOZNACZNIE wykluczają
+// inwestycję. Brak danych nigdy nie jest powodem odrzucenia — jest adnotacją.
 
-async function fetchDeveloperPageText(url) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const resp = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CRM-FastResearch/1.0)' } });
-    clearTimeout(timeout);
-    if (!resp.ok) return '';
-    const html = await resp.text();
-    return stripHtml(html).slice(0, 20000);
-  } catch (e) {
-    return '';
-  }
-}
-
-function parseListingsFromText(text, sourceLabel, sourceLink) {
-  if (!text) return [];
-  const chunks = text.split(/\n\s*\n|(?=(?:Mieszkanie|Lokal|Apartament)\s*(?:nr|#)?\s*\d)/i);
-  const listings = [];
-  for (const raw of chunks) {
-    const chunk = raw.trim();
-    if (chunk.length < 20) continue;
-    const priceMatch = chunk.match(/([\d][\d\s.,]{3,})\s*(?:z[al]|PLN)\b/i);
-    const m2Match = chunk.match(/(\d{2,3}(?:[.,]\d{1,2})?)\s*m(?:2)/i);
-    const roomsMatch = chunk.match(/(\d)\s*(?:pok)/i);
-    const floorMatch = chunk.match(/(parter|\d{1,2})\s*(?:pietro|p\.)/i);
-    const fieldCount = [priceMatch, m2Match, roomsMatch].filter(Boolean).length;
-    if (fieldCount < 2) continue;
-    listings.push({
-      raw: chunk.slice(0, 900),
-      price: priceMatch ? Number(priceMatch[1].replace(/[^\d]/g, '')) : null,
-      m2: m2Match ? Number(m2Match[1].replace(',', '.')) : null,
-      rooms: roomsMatch ? Number(roomsMatch[1]) : null,
-      floor: floorMatch ? floorMatch[1] : null,
-      source: sourceLabel,
-      sourceLink: sourceLink || null
-    });
-    if (listings.length >= 60) break;
-  }
-  return listings;
-}
-
-const PREFERENCE_STOPWORDS = new Set(['szukam','szukamy','mieszkania','mieszkanie','klient','klienta','preferuje','preferencje','chce','chcemy','najlepiej','ewentualnie','oraz','lub','okolo','budzet','budzetu','cena','ceny','zeby','ktore','ktora','jest','tak','nie','bardzo','raczej','moze']);
-
-function extractPreferenceCriteria(prefText) {
-  const t = prefText.toLowerCase();
-  const rooms = t.match(/(\d)\s*(?:pok)/);
-  const maxPriceMatch = t.match(/(?:do|max|maks\w*|budzet[a-z]*)\D{0,10}([\d][\d\s.,]{3,})\s*(?:zl|pln|tys)/);
-  const m2RangeMatch = t.match(/(\d{2,3})\s*(?:-|do)\s*(\d{2,3})\s*m2/);
-  const m2SingleMatch = t.match(/(\d{2,3})\s*m2/);
-  const words = t.split(/[^a-z0-9]+/i).filter(w => w.length > 3 && !/^\d+$/.test(w) && !PREFERENCE_STOPWORDS.has(w));
+function clientCriteria(c) {
   return {
-    rooms: rooms ? Number(rooms[1]) : null,
-    maxPrice: maxPriceMatch ? Number(maxPriceMatch[1].replace(/[^\d]/g, '')) * (/tys/.test(maxPriceMatch[0]) ? 1000 : 1) : null,
-    m2Min: m2RangeMatch ? Number(m2RangeMatch[1]) : (m2SingleMatch ? Number(m2SingleMatch[1]) * 0.85 : null),
-    m2Max: m2RangeMatch ? Number(m2RangeMatch[2]) : (m2SingleMatch ? Number(m2SingleMatch[1]) * 1.15 : null),
-    words: Array.from(new Set(words))
+    budgetMin: Number(c.budget_min) || null,
+    budgetMax: Number(c.budget_max) || null,
+    locations: String(c.pref_locations || '').split(',').map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean),
+    maxTransit: Number(c.max_transit_min) || null,
+    roomsMin: Number(c.rooms_min) || null,
+    roomsMax: Number(c.rooms_max) || null,
+    areaMin: Number(c.area_min) || null,
+    areaMax: Number(c.area_max) || null,
+    floorMin: c.floor_min === null || c.floor_min === undefined ? null : Number(c.floor_min),
+    floorMax: c.floor_max === null || c.floor_max === undefined ? null : Number(c.floor_max),
+    balcony: Boolean(c.needs_balcony),
+    parking: Boolean(c.needs_parking),
+    elevator: Boolean(c.needs_elevator),
+    readyBy: String(c.ready_by || '').trim(),
+    notes: String(c.pref_notes || c.preferencje || '').toLowerCase(),
+    weights: c.pref_weights || null
   };
 }
 
-function scoreListing(listing, criteria) {
-  let score = 0;
-  let maxScore = 0;
-  maxScore += 30;
-  if (criteria.rooms != null && listing.rooms != null) {
-    if (listing.rooms === criteria.rooms) score += 30;
-    else if (Math.abs(listing.rooms - criteria.rooms) === 1) score += 15;
-  } else if (criteria.rooms == null) {
-    score += 15;
-  }
-  maxScore += 25;
-  if (criteria.m2Min != null && listing.m2 != null) {
-    if (listing.m2 >= criteria.m2Min && listing.m2 <= criteria.m2Max) score += 25;
-    else {
-      const dist = Math.min(Math.abs(listing.m2 - criteria.m2Min), Math.abs(listing.m2 - criteria.m2Max));
-      if (dist <= 10) score += 12;
+function scoreInvestment(inv, cr) {
+  let score = 0, max = 0;
+  const reasons = [];
+  const gaps = [];
+
+  max += 40;
+  if (cr.budgetMax && (inv.price_min || inv.price_max)) {
+    const lo = inv.price_min || inv.price_max;
+    if (lo > cr.budgetMax) {
+      return { score: 0, reject: true, reasons: [], gaps: ['Najtańszy lokal (' + lo.toLocaleString('pl-PL') + ' zł) przekracza budżet klienta.'] };
     }
-  } else if (criteria.m2Min == null) {
-    score += 12;
+    if (cr.budgetMin && inv.price_max && inv.price_max < cr.budgetMin) {
+      return { score: 0, reject: true, reasons: [], gaps: ['Cały zakres cen jest poniżej dolnej granicy budżetu.'] };
+    }
+    score += 40;
+    reasons.push('Ceny mieszczą się w budżecie klienta.');
+  } else if (cr.budgetMax && inv.price_per_m2 && cr.areaMin) {
+    const est = inv.price_per_m2 * cr.areaMin;
+    if (est > cr.budgetMax * 1.1) {
+      return { score: 0, reject: true, reasons: [], gaps: ['Szacunek z ceny za m² (' + Math.round(est).toLocaleString('pl-PL') + ' zł) przekracza budżet.'] };
+    }
+    score += 30;
+    reasons.push('Cena za m² mieści się w budżecie (szacunek dla ' + cr.areaMin + ' m²).');
+  } else {
+    score += 18;
+    gaps.push('PDF nie podaje cen — budżetu nie dało się zweryfikować na tym etapie.');
   }
-  maxScore += 25;
-  if (criteria.maxPrice != null && listing.price != null) {
-    if (listing.price <= criteria.maxPrice) score += 25;
-    else if (listing.price <= criteria.maxPrice * 1.1) score += 10;
-  } else if (criteria.maxPrice == null) {
-    score += 12;
-  }
-  maxScore += 20;
-  if (criteria.words.length) {
-    const raw = listing.raw.toLowerCase();
-    const hits = criteria.words.filter(w => raw.includes(w.slice(0, Math.min(5, w.length)))).length;
-    score += Math.min(20, Math.round((hits / criteria.words.length) * 20));
+
+  max += 35;
+  if (cr.locations.length) {
+    const hay = ((inv.location || '') + ' ' + inv.name + ' ' + (inv.raw || '')).toLowerCase();
+    const hit = cr.locations.find(function (loc) { return hay.includes(loc); });
+    if (hit) {
+      score += 35;
+      reasons.push('Lokalizacja zgodna z preferencją: ' + hit + '.');
+    } else if (inv.location) {
+      return { score: 0, reject: true, reasons: [], gaps: ['Lokalizacja (' + inv.location + ') poza preferowanymi dzielnicami.'] };
+    } else {
+      score += 12;
+      gaps.push('PDF nie podaje lokalizacji — nie dało się jej zweryfikować.');
+    }
   } else {
     score += 20;
+    gaps.push('Klient nie ma zdefiniowanej preferowanej lokalizacji.');
   }
-  return Math.round((score / maxScore) * 100);
-}
 
-const PROS_CONS_DICTIONARY = [
-  { keyword: /metro|tramwaj|autobus|komunikacj/i, pro: 'Dobra dostepnosc komunikacji miejskiej (wg opisu).' },
-  { keyword: /balkon|taras|ogrodek/i, pro: 'Dodatkowa przestrzen zewnetrzna (balkon/taras/ogrodek).' },
-  { keyword: /winda/i, pro: 'Budynek wyposazony w winde.' },
-  { keyword: /garaz|miejsce postojowe|parking/i, pro: 'Zapewnione miejsce parkingowe/garaz.' },
-  { keyword: /parter/i, con: 'Lokal na parterze - mniejsza prywatnosc.' },
-  { keyword: /bez windy/i, con: 'Budynek bez windy.' },
-  { keyword: /do remontu/i, con: 'Lokal wymaga dodatkowych nakladow wykonczeniowych.' }
-  ];
-
-function buildProsAndCons(listing) {
-  const pros = [];
-  const cons = [];
-  for (const rule of PROS_CONS_DICTIONARY) {
-    if (rule.keyword.test(listing.raw)) {
-      if (rule.pro) pros.push(rule.pro);
-      if (rule.con) cons.push(rule.con);
+  max += 25;
+  if (cr.maxTransit && inv.transit_min !== null && inv.transit_min !== undefined) {
+    if (inv.transit_min > cr.maxTransit) {
+      return { score: 0, reject: true, reasons: [], gaps: ['Do komunikacji ' + inv.transit_min + ' min, klient chce max ' + cr.maxTransit + ' min.'] };
     }
+    score += 25;
+    reasons.push('Do komunikacji ' + inv.transit_min + ' min (limit ' + cr.maxTransit + ' min).');
+  } else if (cr.maxTransit) {
+    score += 10;
+    gaps.push('PDF nie podaje odległości do komunikacji — do sprawdzenia w etapie 2.');
+  } else {
+    score += 15;
   }
-  if (!pros.length) pros.push('Brak wystarczajacych danych w opisie - zalecana wizja lokalna.');
-  if (!cons.length) cons.push('Brak wykrytych istotnych wad na podstawie opisu - zalecana weryfikacja na miejscu.');
-  return { pros, cons };
+
+  return { score: Math.round((score / max) * 100), reject: false, reasons: reasons, gaps: gaps };
 }
 
-async function buildWalkingDistanceSection() {
-  if (process.env.GOOGLE_MAPS_API_KEY) {
-    return 'Klucz Google Maps API wykryty, ale integracja czasu dojscia pieszo nie jest jeszcze podlaczona w tej wersji.';
-  }
-  return 'Brak klucza GOOGLE_MAPS_API_KEY w konfiguracji serwera - dokladny czas dojscia pieszo do komunikacji nie mogl zostac wyliczony automatycznie. Dodaj ten klucz jako zmienna srodowiskowa na Render, aby wlaczyc te analize.';
-}
-
-function estimateRent(price) {
-  if (!price) return null;
-  return Math.round((price * 0.004) / 50) * 50;
-}
-
-async function buildReportPdfBuffer({ client, listing, score }) {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const doc = new PDFDocument({ margin: 50 });
-      const chunks = [];
-      doc.on('data', c => chunks.push(c));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      const { pros, cons } = buildProsAndCons(listing);
-      const walkingSection = await buildWalkingDistanceSection();
-      const rent = estimateRent(listing.price);
-      doc.fontSize(18).text('Raport dopasowania nieruchomosci', { underline: true });
-      doc.moveDown(0.5);
-      doc.fontSize(11).fillColor('#555').text('Wygenerowano: ' + new Date().toLocaleString('pl-PL'));
-      doc.text('Klient: ' + client.imie + ' ' + client.nazwisko);
-      doc.moveDown();
-      doc.fillColor('#000').fontSize(14).text('Dopasowanie: ' + score + '%', { underline: true });
-      doc.moveDown(0.5);
-      doc.fontSize(13).text('Dane nieruchomosci', { underline: true });
-      doc.fontSize(11);
-      doc.text('Cena: ' + (listing.price ? listing.price.toLocaleString('pl-PL') + ' zl' : 'brak danych'));
-      doc.text('Metraz: ' + (listing.m2 ? listing.m2 + ' m2' : 'brak danych'));
-      doc.text('Liczba pokoi: ' + (listing.rooms != null ? listing.rooms : 'brak danych'));
-      doc.text('Pietro: ' + (listing.floor != null ? listing.floor : 'brak danych'));
-      if (listing.sourceLink) doc.fillColor('#1a56db').text('Zrodlo: ' + listing.sourceLink, { link: listing.sourceLink });
-      doc.fillColor('#000');
-      doc.moveDown();
-      doc.fontSize(13).text('Opis', { underline: true });
-      doc.fontSize(10).fillColor('#333').text(listing.raw);
-      doc.fillColor('#000');
-      doc.moveDown();
-      doc.fontSize(13).text('Dojscie do komunikacji', { underline: true });
-      doc.fontSize(10).fillColor('#333').text(walkingSection);
-      doc.fillColor('#000');
-      doc.moveDown();
-      doc.fontSize(13).text('Zalety', { underline: true });
-      doc.fontSize(10);
-      pros.forEach(p => doc.text('- ' + p));
-      doc.moveDown(0.5);
-      doc.fontSize(13).text('Wady', { underline: true });
-      doc.fontSize(10);
-      cons.forEach(c => doc.text('- ' + c));
-      doc.moveDown();
-      doc.fontSize(13).text('Analiza pod wynajem (szacunkowa)', { underline: true });
-      doc.fontSize(10).fillColor('#333').text(rent ? 'Szacunkowy miesieczny czynsz najmu: ok. ' + rent.toLocaleString('pl-PL') + ' zl (przyblizona regula kciuka). Rentownosc roczna brutto: ok. ' + ((rent * 12 / listing.price) * 100).toFixed(1) + '%.' : 'Brak ceny w danych zrodlowych.');
-      doc.fillColor('#000');
-      doc.moveDown(1.5);
-      doc.fontSize(8).fillColor('#888').text('Raport wygenerowany automatycznie na podstawie tresci przeslanych plikow PDF i stron deweloperow. Dane moga byc niekompletne - zalecana weryfikacja u dewelopera.');
-      doc.end();
-    } catch (err) {
-      reject(err);
-    }
-  });
-}
-
-app.post('/api/research/run', async (req, res) => {
-  const { client_id, preferences } = req.body;
-  if (!client_id || !preferences || !String(preferences).trim()) {
-    return res.status(400).json({ error: 'Wybierz klienta i podaj preferencje.' });
-  }
+app.post('/api/research/stage1', (req, res) => {
+  const { client_id, pdf_id } = req.body;
   const client = db.get('clients').find({ id: client_id, profile_id: req.profileId }).value();
   if (!client) return res.status(404).json({ error: 'Nie znaleziono klienta.' });
-  const pdfs = db.get('investmentPdfs').filter({ profile_id: req.profileId }).value();
-  const links = db.get('developerLinks').filter({ profile_id: req.profileId }).value();
-  if (!pdfs.length && !links.length) {
-    return res.status(400).json({ error: 'Brak danych zrodlowych - dodaj linki deweloperow lub PDF w Admin Panelu.' });
-  }
-  let allListings = [];
-  for (const pdf of pdfs) {
-    allListings = allListings.concat(parseListingsFromText(pdf.text, pdf.filename, null));
-  }
-  for (const link of links) {
-    const text = await fetchDeveloperPageText(link.url);
-    allListings = allListings.concat(parseListingsFromText(text, link.label || link.url, link.url));
-  }
-  if (!allListings.length) {
-    return res.status(422).json({ error: 'Nie udalo sie wyodrebnic zadnych ofert z podanych zrodel.' });
-  }
-  const criteria = extractPreferenceCriteria(preferences);
-  const scored = allListings.map(listing => ({ listing, score: scoreListing(listing, criteria) }));
-  scored.sort((a, b) => b.score - a.score);
-  const strong = scored.filter(s => s.score >= 90).slice(0, 5);
-  const needsPreferenceChange = strong.length === 0;
-  const chosen = needsPreferenceChange ? scored.filter(s => s.score >= 60 && s.score < 90).slice(0, 5) : strong;
-  const results = [];
-  for (const item of chosen) {
-    const pdfBuffer = await buildReportPdfBuffer({ client, listing: item.listing, score: item.score });
-    results.push({
-      score: item.score,
-      price: item.listing.price,
-      m2: item.listing.m2,
-      rooms: item.listing.rooms,
-      floor: item.listing.floor,
-      source: item.listing.source,
-      sourceLink: item.listing.sourceLink,
-      excerpt: item.listing.raw.slice(0, 300),
-      pdfBase64: pdfBuffer.toString('base64')
+  const pdf = db.get('researchPdfs').find({ id: pdf_id, profile_id: req.profileId }).value();
+  if (!pdf) return res.status(404).json({ error: 'Nie znaleziono listy inwestycji (PDF).' });
+
+  const cr = clientCriteria(client);
+  const matched = [];
+  const rejected = [];
+
+  (pdf.investments || []).forEach(function (inv) {
+    const r = scoreInvestment(inv, cr);
+    const row = Object.assign({}, inv, { score: r.score, reasons: r.reasons, gaps: r.gaps });
+    delete row.raw;
+    if (r.reject) { const rr = Object.assign({}, inv, { reason: r.gaps[0] || 'Nie spełnia kryteriów.' }); delete rr.raw; rejected.push(rr); }
+    else matched.push(row);
+  });
+
+  matched.sort(function (a, b) { return b.score - a.score; });
+  res.json({
+    client: { id: client.id, name: client.imie + ' ' + client.nazwisko },
+    pdf: { id: pdf.id, filename: pdf.filename },
+    total: (pdf.investments || []).length,
+    matched: matched,
+    rejected: rejected
+  });
+});
+
+// --- ETAP 2: research konkretnych lokali na stronach deweloperow ------------
+// Z kluczem ANTHROPIC_API_KEY korzystamy z modelu z wyszukiwaniem webowym.
+// Bez klucza probujemy pobrac strone z PDF-a zwyklym fetch i uczciwie
+// raportujemy, czego nie dalo sie odczytac. Nigdy nie zmyslamy lokali.
+
+function stripHtml(html) {
+  return String(html)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function fetchPageText(url) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(function () { controller.abort(); }, 12000);
+    const resp = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RealEstateCRM/2.0)' }
     });
+    clearTimeout(timeout);
+    if (!resp.ok) return null;
+    return stripHtml(await resp.text()).slice(0, 30000);
+  } catch (e) {
+    return null;
   }
-  res.json({ needsPreferenceChange, results });
+}
+
+function prefsSummary(cr) {
+  const p = [];
+  if (cr.budgetMin || cr.budgetMax) p.push('budzet ' + (cr.budgetMin || 0).toLocaleString('pl-PL') + '-' + (cr.budgetMax || 0).toLocaleString('pl-PL') + ' zl');
+  if (cr.roomsMin || cr.roomsMax) p.push('pokoje ' + (cr.roomsMin || '?') + '-' + (cr.roomsMax || '?'));
+  if (cr.areaMin || cr.areaMax) p.push('metraz ' + (cr.areaMin || '?') + '-' + (cr.areaMax || '?') + ' m2');
+  if (cr.floorMin !== null || cr.floorMax !== null) p.push('pietro ' + (cr.floorMin === null ? '?' : cr.floorMin) + '-' + (cr.floorMax === null ? '?' : cr.floorMax));
+  if (cr.balcony) p.push('wymagany balkon/taras/ogrodek');
+  if (cr.parking) p.push('wymagane miejsce parkingowe');
+  if (cr.elevator) p.push('wymagana winda');
+  if (cr.readyBy) p.push('termin oddania do ' + cr.readyBy);
+  if (cr.maxTransit) p.push('max ' + cr.maxTransit + ' min do komunikacji');
+  if (cr.notes) p.push('uwagi klienta: ' + cr.notes.slice(0, 300));
+  return p.join('; ');
+}
+
+async function aiFindUnits(inv, cr) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  try {
+    const prompt =
+      'Jestes asystentem agenta nieruchomosci. Znajdz AKTUALNIE DOSTEPNE mieszkania w konkretnej inwestycji.\n\n' +
+      'INWESTYCJA: ' + inv.name + '\n' +
+      'DEWELOPER: ' + (inv.developer || 'nieznany - ustal') + '\n' +
+      'LOKALIZACJA: ' + (inv.location || 'nieznana') + '\n' +
+      'STRONA: ' + (inv.url || 'nieznana - znajdz oficjalna strone tej inwestycji') + '\n\n' +
+      'PREFERENCJE KLIENTA: ' + prefsSummary(cr) + '\n\n' +
+      'ZASADY (krytyczne):\n' +
+      '1. Szukaj WYLACZNIE na oficjalnej stronie tego dewelopera/inwestycji.\n' +
+      '2. NIE WYMYSLAJ mieszkan. Jesli nie znajdziesz konkretnych lokali, zwroc pusta liste units i wyjasnij dlaczego w polu note.\n' +
+      '3. Dla kazdego lokalu podaj link do konkretnej oferty w polu source.\n' +
+      '4. Pola, ktorych nie znalazles, ustaw na null - nie zgaduj.\n\n' +
+      'Zwroc WYLACZNIE JSON:\n' +
+      '{\"official_url\":\"...\",\"note\":\"...\",\"investment\":{\"pros\":[\"...\"],\"cons\":[\"...\"],\"transit\":\"...\",\"ready\":\"...\",\"price_range\":\"...\"},' +
+      '\"units\":[{\"rooms\":3,\"area\":62.5,\"floor\":2,\"price\":890000,\"layout\":\"...\",\"balcony\":true,\"parking\":true,\"storage\":false,\"available_from\":\"...\",\"source\":\"https://...\",\"unclear\":[\"czego brakowalo na stronie\"]}]}';
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const text = (data.content || []).filter(function (c) { return c.type === 'text'; }).map(function (c) { return c.text || ''; }).join('');
+    const m = text.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const parsed = JSON.parse(m[0]);
+    if (!Array.isArray(parsed.units)) parsed.units = [];
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+function scoreUnit(u, cr) {
+  const w = cr.weights || {};
+  const parts = [];
+  const missing = [];
+  const add = function (name, weight, value, note) {
+    parts.push({ name: name, weight: weight, value: value });
+    if (value < 1 && note) missing.push(note);
+  };
+
+  if (cr.roomsMin || cr.roomsMax) {
+    let v = 0.5;
+    if (u.rooms === null || u.rooms === undefined) { v = 0.5; missing.push('brak danych o liczbie pokoi'); }
+    else if ((!cr.roomsMin || u.rooms >= cr.roomsMin) && (!cr.roomsMax || u.rooms <= cr.roomsMax)) v = 1;
+    else { v = 0; missing.push('liczba pokoi (' + u.rooms + ') poza zakresem'); }
+    add('pokoje', Number(w.rooms) || 25, v);
+  }
+  if (cr.areaMin || cr.areaMax) {
+    let v = 0.5;
+    if (u.area === null || u.area === undefined) { v = 0.5; missing.push('brak danych o metrazu'); }
+    else if ((!cr.areaMin || u.area >= cr.areaMin) && (!cr.areaMax || u.area <= cr.areaMax)) v = 1;
+    else {
+      const dist = u.area < (cr.areaMin || 0) ? (cr.areaMin - u.area) : (u.area - cr.areaMax);
+      v = dist <= 5 ? 0.6 : 0;
+      missing.push('metraz ' + u.area + ' m2 poza zakresem');
+    }
+    add('metraz', Number(w.area) || 25, v);
+  }
+  if (cr.budgetMax) {
+    let v = 0.5;
+    if (u.price === null || u.price === undefined) { v = 0.5; missing.push('brak ceny lokalu'); }
+    else if (u.price <= cr.budgetMax && (!cr.budgetMin || u.price >= cr.budgetMin * 0.7)) v = 1;
+    else if (u.price <= cr.budgetMax * 1.05) { v = 0.6; missing.push('cena lekko ponad budzet'); }
+    else { v = 0; missing.push('cena ' + Number(u.price).toLocaleString('pl-PL') + ' zl przekracza budzet'); }
+    add('cena', Number(w.price) || 30, v);
+  }
+  if (cr.floorMin !== null || cr.floorMax !== null) {
+    let v = 0.5;
+    if (u.floor === null || u.floor === undefined) { v = 0.5; missing.push('brak danych o pietrze'); }
+    else if ((cr.floorMin === null || u.floor >= cr.floorMin) && (cr.floorMax === null || u.floor <= cr.floorMax)) v = 1;
+    else { v = 0; missing.push('pietro ' + u.floor + ' poza preferencja'); }
+    add('pietro', Number(w.floor) || 10, v);
+  }
+  if (cr.balcony) add('balkon', Number(w.balcony) || 10, u.balcony === true ? 1 : (u.balcony === false ? 0 : 0.5), u.balcony === false ? 'brak balkonu/tarasu' : 'brak informacji o balkonie');
+  if (cr.parking) add('parking', Number(w.parking) || 10, u.parking === true ? 1 : (u.parking === false ? 0 : 0.5), u.parking === false ? 'brak miejsca parkingowego' : 'brak informacji o parkingu');
+
+  if (!parts.length) return { score: 50, missing: ['Klient nie ma zdefiniowanych kryteriow lokalu.'] };
+  const totalW = parts.reduce(function (a, p) { return a + p.weight; }, 0);
+  const sum = parts.reduce(function (a, p) { return a + p.weight * p.value; }, 0);
+  return { score: Math.round((sum / totalW) * 100), missing: missing };
+}
+
+// --- ETAP 2 + 3: research i raport koncowy ---------------------------------
+
+app.post('/api/research/run', async (req, res) => {
+  const { client_id, pdf_id, investment_ids } = req.body;
+  const client = db.get('clients').find({ id: client_id, profile_id: req.profileId }).value();
+  if (!client) return res.status(404).json({ error: 'Nie znaleziono klienta.' });
+  const pdf = db.get('researchPdfs').find({ id: pdf_id, profile_id: req.profileId }).value();
+  if (!pdf) return res.status(404).json({ error: 'Nie znaleziono listy inwestycji (PDF).' });
+  if (!Array.isArray(investment_ids) || !investment_ids.length) {
+    return res.status(400).json({ error: 'Zaznacz przynajmniej jedna inwestycje do researchu.' });
+  }
+
+  const cr = clientCriteria(client);
+  // Kluczowe: bierzemy WYLACZNIE inwestycje z tego PDF-a.
+  const chosen = (pdf.investments || []).filter(function (i) { return investment_ids.includes(i.id); });
+  if (!chosen.length) return res.status(400).json({ error: 'Zaznaczone inwestycje nie naleza do tej listy PDF.' });
+
+  const aiAvailable = Boolean(process.env.ANTHROPIC_API_KEY);
+  const perInvestment = [];
+  const allUnits = [];
+
+  for (const inv of chosen) {
+    const entry = {
+      investment: inv.name,
+      developer: inv.developer,
+      location: inv.location,
+      url: inv.url,
+      official_url: inv.url,
+      note: null,
+      source_mode: aiAvailable ? 'ai-web-search' : 'html-fetch',
+      pros: [],
+      cons: [],
+      units_found: 0
+    };
+
+    const ai = await aiFindUnits(inv, cr);
+    if (ai) {
+      entry.official_url = ai.official_url || inv.url;
+      entry.note = ai.note || null;
+      if (ai.investment) {
+        entry.pros = Array.isArray(ai.investment.pros) ? ai.investment.pros : [];
+        entry.cons = Array.isArray(ai.investment.cons) ? ai.investment.cons : [];
+        entry.transit = ai.investment.transit || (inv.transit_min ? inv.transit_min + ' min' : null);
+        entry.ready = ai.investment.ready || inv.ready;
+        entry.price_range = ai.investment.price_range || null;
+      }
+      (ai.units || []).forEach(function (u) {
+        const sc = scoreUnit(u, cr);
+        allUnits.push({
+          investment: inv,
+          entry_pros: entry.pros,
+          entry_cons: entry.cons,
+          transit: entry.transit || null,
+          ready: entry.ready || inv.ready,
+          price_range: entry.price_range || null,
+          unit: u,
+          score: sc.score,
+          missing: sc.missing,
+          unclear: Array.isArray(u.unclear) ? u.unclear : [],
+          source: u.source || entry.official_url || null
+        });
+      });
+      entry.units_found = (ai.units || []).length;
+    } else {
+      const page = inv.url ? await fetchPageText(inv.url) : null;
+      entry.note = inv.url
+        ? (page
+            ? 'Nie udalo sie automatycznie odczytac listy dostepnych lokali ze strony (oferty ladowane skryptem). Sprawdz recznie: ' + inv.url
+            : 'Strona dewelopera nie odpowiedziala. Sprawdz recznie: ' + inv.url)
+        : 'PDF nie podaje strony inwestycji, a wyszukiwanie internetowe jest niedostepne (brak ANTHROPIC_API_KEY).';
+      entry.transit = inv.transit_min ? inv.transit_min + ' min' : null;
+      entry.ready = inv.ready;
+    }
+    perInvestment.push(entry);
+  }
+
+  // ETAP 3 - wybor 3 najlepszych. Prog 80%; jesli nikt go nie przekracza,
+  // pokazujemy najlepsze dostepne z wyrazna adnotacja.
+  allUnits.sort(function (a, b) { return b.score - a.score; });
+  const strong = allUnits.filter(function (u) { return u.score >= 80; });
+  const belowThreshold = strong.length === 0 && allUnits.length > 0;
+  const top = (strong.length ? strong : allUnits).slice(0, 3);
+
+  const report = {
+    id: uuidv4(),
+    profile_id: req.profileId,
+    client_id: client.id,
+    client_name: client.imie + ' ' + client.nazwisko,
+    pdf_id: pdf.id,
+    pdf_filename: pdf.filename,
+    researched_at: now(),
+    ai_used: aiAvailable,
+    below_threshold: belowThreshold,
+    investigated: perInvestment,
+    results: top.map(function (r) {
+      return {
+        score: r.score,
+        investment: {
+          name: r.investment.name,
+          developer: r.investment.developer,
+          location: r.investment.location,
+          transit: r.transit,
+          ready: r.ready,
+          price_range: r.price_range || (r.investment.price_min ? r.investment.price_min.toLocaleString('pl-PL') + ' - ' + (r.investment.price_max || 0).toLocaleString('pl-PL') + ' zl' : null),
+          pros: r.entry_pros,
+          cons: r.entry_cons
+        },
+        unit: {
+          rooms: r.unit.rooms == null ? null : r.unit.rooms,
+          area: r.unit.area == null ? null : r.unit.area,
+          floor: r.unit.floor == null ? null : r.unit.floor,
+          price: r.unit.price == null ? null : r.unit.price,
+          layout: r.unit.layout || null,
+          balcony: r.unit.balcony == null ? null : r.unit.balcony,
+          parking: r.unit.parking == null ? null : r.unit.parking,
+          storage: r.unit.storage == null ? null : r.unit.storage,
+          available_from: r.unit.available_from || null,
+          source: r.source
+        },
+        missing: r.missing,
+        unclear: r.unclear
+      };
+    })
+  };
+
+  db.get('researchReports').push(report).write();
+  res.json(report);
+});
+
+app.get('/api/research/reports', (req, res) => {
+  const q = { profile_id: req.profileId };
+  if (req.query.client_id) q.client_id = req.query.client_id;
+  const list = db.get('researchReports').filter(q).value()
+    .sort(function (a, b) { return new Date(b.researched_at) - new Date(a.researched_at); })
+    .map(function (r) { return { id: r.id, client_name: r.client_name, pdf_filename: r.pdf_filename, researched_at: r.researched_at, count: r.results.length }; });
+  res.json(list);
+});
+
+app.get('/api/research/reports/:id', (req, res) => {
+  const r = db.get('researchReports').find({ id: req.params.id, profile_id: req.profileId }).value();
+  if (!r) return res.status(404).json({ error: 'Nie znaleziono raportu.' });
+  res.json(r);
 });
 
 app.get('*', (req, res) => {
