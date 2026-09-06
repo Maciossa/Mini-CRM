@@ -1132,148 +1132,6 @@ async function loadAdminPdfs() {
   }
 }
 
-async function renderAdminPanel() {
-  await refreshAdminFlag();
-  if (!currentIsAdmin) {
-    const list = $('#admin-links-list');
-    if (list) list.innerHTML = '<div class="admin-list-empty">Brak dostępu.</div>';
-    return;
-  }
-  await Promise.all([loadAdminLinks(), loadAdminPdfs()]);
-}
-
-function renderResearchView() {
-  const select = $('#research-client-select');
-  if (!select) return;
-  select.innerHTML = clients.length
-    ? clients.map(c => `<option value="${c.id}">${escapeHtml(c.imie)} ${escapeHtml(c.nazwisko)}</option>`).join('')
-    : '<option value="">Brak klientów — dodaj klienta w Deals</option>';
-  const hint = $('#research-source-hint');
-  if (hint) hint.textContent = 'Wyszukiwanie bazuje na PDF-ach i linkach deweloperów dodanych w Admin Panelu.';
-  const results = $('#research-results');
-  if (results) results.innerHTML = '';
-
-  const prefBox = $('#research-preferences');
-  const chosen = clients.find(c => c.id === select.value);
-  if (prefBox && chosen && chosen.preferencje && !prefBox.value.trim()) {
-    prefBox.value = chosen.preferencje;
-  }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  refreshAdminFlag();
-});
-refreshAdminFlag();
-
-$$('.nav-item').forEach(btn => {
-  if (btn.dataset.view === 'admin') btn.addEventListener('click', () => renderAdminPanel());
-  if (btn.dataset.view === 'research') btn.addEventListener('click', () => renderResearchView());
-});
-
-const adminNavBtn = $('#btn-nav-admin');
-if (adminNavBtn) {
-  adminNavBtn.addEventListener('click', () => {
-    $$('.nav-item').forEach(b => b.classList.remove('active'));
-    adminNavBtn.classList.add('active');
-    $$('.view').forEach(v => v.classList.remove('active'));
-    $('#view-admin').classList.add('active');
-    renderAdminPanel();
-  });
-}
-
-const addLinkBtn = $('#btn-add-developer-link');
-if (addLinkBtn) addLinkBtn.addEventListener('click', async () => {
-  const url = $('#admin-link-url').value.trim();
-  const label = $('#admin-link-label').value.trim();
-  if (!url) { toast('Podaj adres URL.'); return; }
-  try {
-    await api('/admin/developer-links', { method: 'POST', body: JSON.stringify({ url, label }) });
-    $('#admin-link-url').value = '';
-    $('#admin-link-label').value = '';
-    loadAdminLinks();
-    toast('Link dodany.');
-  } catch (err) { toast(err.message); }
-});
-
-const pdfInput = $('#admin-pdf-input');
-if (pdfInput) pdfInput.addEventListener('change', async e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    toast('Przetwarzanie PDF...');
-    const base64 = await fileToBase64(file);
-    await api('/admin/investment-pdfs', { method: 'POST', body: JSON.stringify({ filename: file.name, base64 }) });
-    loadAdminPdfs();
-    toast('PDF wgrany i przetworzony.');
-  } catch (err) {
-    toast(err.message);
-  } finally {
-    e.target.value = '';
-  }
-});
-
-const runResearchBtn = $('#btn-run-research');
-if (runResearchBtn) runResearchBtn.addEventListener('click', async () => {
-  const clientId = $('#research-client-select').value;
-  const preferences = $('#research-preferences').value.trim();
-  if (!clientId) { toast('Wybierz klienta.'); return; }
-  if (!preferences) { toast('Wpisz preferencje klienta.'); return; }
-
-  runResearchBtn.disabled = true;
-  runResearchBtn.textContent = '⏳ Analizuję...';
-  const resultsEl = $('#research-results');
-  resultsEl.innerHTML = '';
-
-  try {
-    const data = await api('/research/run', {
-      method: 'POST',
-      body: JSON.stringify({ client_id: clientId, preferences })
-    });
-
-    if (data.needsPreferenceChange) {
-      openModal('modal-research-warning');
-    }
-
-    if (!data.results.length) {
-      resultsEl.innerHTML = '<div class="admin-list-empty">Brak jakichkolwiek dopasowań w podanych źródłach.</div>';
-    } else {
-      resultsEl.innerHTML = data.results.map((r, i) => `
-        <div class="research-result-card">
-          <span class="research-score-badge">🎯 ${r.score}% dopasowania</span>
-          <div class="research-result-meta">
-            <span>Cena: ${r.price ? Number(r.price).toLocaleString('pl-PL') + ' zł' : 'brak danych'}</span>
-            <span>Metraż: ${r.m2 ? r.m2 + ' m²' : 'brak danych'}</span>
-            <span>Pokoje: ${r.rooms ?? 'brak danych'}</span>
-            <span>Piętro: ${r.floor ?? 'brak danych'}</span>
-            <span>Źródło: ${escapeHtml(r.source || 'PDF inwestycji')}</span>
-          </div>
-          <div class="research-result-excerpt">${escapeHtml(r.excerpt)}</div>
-          <div class="research-result-actions">
-            ${r.sourceLink ? `<a class="btn btn-ghost" href="${escapeHtml(r.sourceLink)}" target="_blank" rel="noopener">🔗 Otwórz u dewelopera</a>` : ''}
-            <button class="btn btn-primary btn-download-report" data-index="${i}">⬇ Pobierz raport PDF</button>
-          </div>
-        </div>
-      `).join('');
-      $$('.btn-download-report').forEach(b => b.addEventListener('click', () => {
-        const r = data.results[Number(b.dataset.index)];
-        const blob = new Blob([Uint8Array.from(atob(r.pdfBase64), c => c.charCodeAt(0))], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `raport-dopasowania-${r.score}proc.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      }));
-    }
-  } catch (err) {
-    toast(err.message);
-  } finally {
-    runResearchBtn.disabled = false;
-    runResearchBtn.textContent = '✦ Uruchom Fast Research';
-  }
-});
 
 const researchClientSelect = $('#research-client-select');
 if (researchClientSelect) researchClientSelect.addEventListener('change', () => {
@@ -1915,4 +1773,227 @@ $('#btn-improve-script').addEventListener('click', async function () {
 
 $$('.nav-item').forEach(function (btn) {
   if (btn.dataset.view === 'practice') btn.addEventListener('click', function () { loadPractice(); });
+});
+
+
+// ===========================================================================
+// FAST RESEARCH v2 — 4 kroki: klient+PDF -> inwestycje -> research -> raport
+// ===========================================================================
+let frPdfs = [];
+let frStage1 = null;
+let frReport = null;
+
+function frSetStep(n) {
+  $$('.fr-step').forEach(el => el.classList.toggle('active', Number(el.dataset.step) <= n));
+  [1, 2, 3, 4].forEach(i => {
+    const p = $('#fr-step-' + i);
+    if (p) p.style.display = i === n ? 'block' : 'none';
+  });
+  $('#fr-restart').style.display = n > 1 ? 'inline-block' : 'none';
+}
+
+function frMoney(v) {
+  return (v === null || v === undefined) ? '—' : Number(v).toLocaleString('pl-PL') + ' zł';
+}
+function frVal(v, suffix) {
+  return (v === null || v === undefined || v === '') ? '<span class="fr-na">brak danych</span>' : escapeHtml(String(v)) + (suffix || '');
+}
+function frBool(v) {
+  if (v === true) return '✅ tak';
+  if (v === false) return '❌ nie';
+  return '<span class="fr-na">brak danych</span>';
+}
+
+// Podgląd preferencji wybranego klienta — agent od razu widzi, na czym
+// system oprze dopasowanie, i czego brakuje w profilu.
+function frRenderPrefs() {
+  const c = clients.find(x => x.id === $('#fr-client').value);
+  const box = $('#fr-prefs');
+  if (!c) { box.innerHTML = ''; return; }
+  const rows = [
+    ['Budżet', (c.budget_min || c.budget_max) ? (frMoney(c.budget_min) + ' – ' + frMoney(c.budget_max)) : null],
+    ['Lokalizacje', c.pref_locations],
+    ['Max do komunikacji', c.max_transit_min ? c.max_transit_min + ' min' : null],
+    ['Pokoje', (c.rooms_min || c.rooms_max) ? ((c.rooms_min || '?') + ' – ' + (c.rooms_max || '?')) : null],
+    ['Metraż', (c.area_min || c.area_max) ? ((c.area_min || '?') + ' – ' + (c.area_max || '?') + ' m²') : null],
+    ['Priorytety', [c.needs_balcony && 'balkon', c.needs_parking && 'parking', c.needs_elevator && 'winda'].filter(Boolean).join(', ')]
+  ];
+  const missing = rows.filter(r => !r[1]).map(r => r[0]);
+  box.innerHTML = '<div class="fr-prefs-grid">' + rows.map(r =>
+    '<div><span class="fr-prefs-label">' + r[0] + '</span><span class="fr-prefs-value">' + (r[1] ? escapeHtml(String(r[1])) : '<span class="fr-na">nie ustawiono</span>') + '</span></div>'
+  ).join('') + '</div>' +
+  (missing.length ? '<p class="fr-warn">Uzupełnij w karcie klienta: ' + escapeHtml(missing.join(', ')) + ' — im mniej danych, tym słabsze dopasowanie.</p>' : '');
+}
+
+async function frLoadPdfs() {
+  try {
+    frPdfs = await api('/research/pdfs');
+  } catch (err) { frPdfs = []; }
+  $('#fr-pdf-select').innerHTML = frPdfs.length
+    ? frPdfs.map(p => '<option value="' + p.id + '">' + escapeHtml(p.filename) + ' — ' + p.count + ' inwestycji (' + new Date(p.created_at).toLocaleDateString('pl-PL') + ')</option>').join('')
+    : '<option value="">Brak wgranych list — wgraj PDF</option>';
+}
+
+async function initFastResearch() {
+  frSetStep(1);
+  $('#fr-client').innerHTML = clients.length
+    ? clients.map(c => '<option value="' + c.id + '">' + escapeHtml(c.imie) + ' ' + escapeHtml(c.nazwisko) + '</option>').join('')
+    : '<option value="">Brak klientów — dodaj klienta w Deals</option>';
+  frRenderPrefs();
+  await frLoadPdfs();
+}
+
+$('#fr-client').addEventListener('change', frRenderPrefs);
+
+$('#fr-pdf-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const status = $('#fr-pdf-status');
+  status.textContent = 'Przetwarzam PDF…';
+  try {
+    const base64 = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result.split(',')[1]);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+    const res = await api('/research/pdf', { method: 'POST', body: JSON.stringify({ filename: file.name, base64 }) });
+    await frLoadPdfs();
+    $('#fr-pdf-select').value = res.id;
+    status.textContent = 'Odczytano ' + res.count + ' inwestycji z pliku ' + res.filename + '.';
+    toast('Lista inwestycji wgrana.');
+  } catch (err) {
+    status.textContent = err.message;
+    toast(err.message);
+  } finally {
+    e.target.value = '';
+  }
+});
+
+$('#fr-go-stage1').addEventListener('click', async () => {
+  const clientId = $('#fr-client').value;
+  const pdfId = $('#fr-pdf-select').value;
+  if (!clientId) { toast('Wybierz klienta.'); return; }
+  if (!pdfId) { toast('Wgraj lub wybierz listę inwestycji (PDF).'); return; }
+  try {
+    frStage1 = await api('/research/stage1', { method: 'POST', body: JSON.stringify({ client_id: clientId, pdf_id: pdfId }) });
+    frRenderStage1();
+    frSetStep(2);
+  } catch (err) { toast(err.message); }
+});
+
+function frRenderStage1() {
+  const d = frStage1;
+  $('#fr-stage1-summary').textContent =
+    'Z ' + d.total + ' inwestycji w pliku ' + d.pdf_filename + ' do kryteriów klienta pasuje ' + d.matched.length + '. Zaznacz te, które mam sprawdzić na stronach deweloperów.';
+
+  $('#fr-matched').innerHTML = d.matched.length ? d.matched.map(m =>
+    '<label class="fr-inv-card"><input type="checkbox" class="fr-inv-check" value="' + m.id + '" checked />' +
+    '<div class="fr-inv-main"><div class="fr-inv-head"><span class="fr-inv-name">' + escapeHtml(m.name) + '</span>' +
+    '<span class="fr-score">' + m.score + '%</span></div>' +
+    '<div class="fr-inv-meta">' + escapeHtml(m.developer || 'deweloper: brak danych') + ' · ' + escapeHtml(m.location || 'lokalizacja: brak danych') +
+    (m.price_min ? ' · ' + frMoney(m.price_min) + ' – ' + frMoney(m.price_max) : (m.price_per_m2 ? ' · ' + frMoney(m.price_per_m2) + '/m²' : '')) + '</div>' +
+    m.reasons.map(r => '<div class="fr-reason ok">✓ ' + escapeHtml(r) + '</div>').join('') +
+    m.gaps.map(g => '<div class="fr-reason gap">? ' + escapeHtml(g) + '</div>').join('') +
+    '</div></label>'
+  ).join('') : '<div class="admin-list-empty">Żadna inwestycja z tej listy nie spełnia kryteriów klienta.</div>';
+
+  $('#fr-rejected').innerHTML = d.rejected.length
+    ? '<details class="fr-rejected"><summary>Odrzucone inwestycje (' + d.rejected.length + ')</summary>' +
+      d.rejected.map(r => '<div class="fr-rej-row"><strong>' + escapeHtml(r.name) + '</strong> — ' + escapeHtml(r.reason) + '</div>').join('') +
+      '</details>'
+    : '';
+}
+
+$('#fr-back-1').addEventListener('click', () => frSetStep(1));
+$('#fr-back-2').addEventListener('click', () => frSetStep(2));
+$('#fr-restart').addEventListener('click', () => initFastResearch());
+$('#fr-print').addEventListener('click', () => window.print());
+
+$('#fr-go-stage2').addEventListener('click', async () => {
+  const ids = $$('.fr-inv-check:checked').map(c => c.value);
+  if (!ids.length) { toast('Zaznacz przynajmniej jedną inwestycję.'); return; }
+  const chosen = frStage1.matched.filter(m => ids.includes(m.id));
+
+  frSetStep(3);
+  $('#fr-progress').innerHTML = chosen.map(c =>
+    '<div class="fr-prog-row"><span class="fr-spinner"></span> Sprawdzam stronę: <strong>' + escapeHtml(c.developer || c.name) + '</strong>…</div>'
+  ).join('') + '<p class="settings-hint" style="margin-top:14px;">Research potrafi potrwać — system otwiera strony deweloperów i czyta listy dostępnych lokali.</p>';
+
+  try {
+    frReport = await api('/research/run', {
+      method: 'POST',
+      body: JSON.stringify({ client_id: frStage1.client.id, pdf_id: frStage1.pdf.id, investment_ids: ids })
+    });
+    frRenderReport();
+    frSetStep(4);
+  } catch (err) {
+    toast(err.message);
+    frSetStep(2);
+  }
+});
+
+function frRenderReport() {
+  const d = frReport;
+  const head =
+    '<div class="fr-report-head"><div>' +
+    '<h2 class="fr-report-title">Raport dopasowania — ' + escapeHtml(d.client_name) + '</h2>' +
+    '<p class="settings-hint">Źródło listy: ' + escapeHtml(d.pdf_filename) + ' · Data researchu: ' + new Date(d.researched_at).toLocaleString('pl-PL') +
+    ' · Tryb: ' + (d.ai_used ? 'wyszukiwanie internetowe' : 'ograniczony (brak klucza API)') + '</p>' +
+    '</div></div>' +
+    (d.below_threshold ? '<p class="fr-warn">Żaden lokal nie osiągnął 80% zgodności. Poniżej najlepsze dostępne dopasowania — sprawdź, czego zabrakło.</p>' : '');
+
+  const invNotes = d.investigated.filter(e => e.note).map(e =>
+    '<div class="fr-note"><strong>' + escapeHtml(e.investment) + '</strong>: ' + escapeHtml(e.note) + '</div>'
+  ).join('');
+
+  if (!d.results.length) {
+    $('#fr-report').innerHTML = head +
+      '<div class="admin-list-empty">Nie znaleziono żadnych konkretnych lokali. Szczegóły poniżej — nie wymyślam mieszkań, których nie udało się odczytać.</div>' + invNotes;
+    return;
+  }
+
+  $('#fr-report').innerHTML = head + d.results.map((r, i) =>
+    '<div class="fr-result">' +
+      '<div class="fr-result-top"><span class="fr-rank">#' + (i + 1) + '</span>' +
+      '<span class="fr-result-name">' + escapeHtml(r.investment.name) + '</span>' +
+      '<span class="fr-score big">' + r.score + '%</span></div>' +
+
+      '<div class="fr-sect"><div class="fr-sect-title">A. Inwestycja</div><div class="fr-grid">' +
+      '<div><span class="fr-k">Deweloper</span><span class="fr-v">' + frVal(r.investment.developer) + '</span></div>' +
+      '<div><span class="fr-k">Lokalizacja</span><span class="fr-v">' + frVal(r.investment.location) + '</span></div>' +
+      '<div><span class="fr-k">Komunikacja</span><span class="fr-v">' + frVal(r.investment.transit) + '</span></div>' +
+      '<div><span class="fr-k">Termin oddania</span><span class="fr-v">' + frVal(r.investment.ready) + '</span></div>' +
+      '<div><span class="fr-k">Zakres cen</span><span class="fr-v">' + frVal(r.investment.price_range) + '</span></div>' +
+      '</div>' +
+      (r.investment.pros.length ? '<ul class="fr-pros">' + r.investment.pros.map(p => '<li>✅ ' + escapeHtml(p) + '</li>').join('') + '</ul>' : '') +
+      (r.investment.cons.length ? '<ul class="fr-cons">' + r.investment.cons.map(p => '<li>❌ ' + escapeHtml(p) + '</li>').join('') + '</ul>' : '') +
+      '</div>' +
+
+      '<div class="fr-sect"><div class="fr-sect-title">B. Mieszkanie</div><div class="fr-grid">' +
+      '<div><span class="fr-k">Metraż</span><span class="fr-v">' + frVal(r.unit.area, ' m²') + '</span></div>' +
+      '<div><span class="fr-k">Pokoje</span><span class="fr-v">' + frVal(r.unit.rooms) + '</span></div>' +
+      '<div><span class="fr-k">Piętro</span><span class="fr-v">' + frVal(r.unit.floor) + '</span></div>' +
+      '<div><span class="fr-k">Cena</span><span class="fr-v">' + (r.unit.price === null ? '<span class="fr-na">brak danych</span>' : frMoney(r.unit.price)) + '</span></div>' +
+      '<div><span class="fr-k">Balkon/taras</span><span class="fr-v">' + frBool(r.unit.balcony) + '</span></div>' +
+      '<div><span class="fr-k">Parking</span><span class="fr-v">' + frBool(r.unit.parking) + '</span></div>' +
+      '<div><span class="fr-k">Komórka lokatorska</span><span class="fr-v">' + frBool(r.unit.storage) + '</span></div>' +
+      '<div><span class="fr-k">Dostępność</span><span class="fr-v">' + frVal(r.unit.available_from) + '</span></div>' +
+      '</div>' +
+      (r.unit.layout ? '<p class="fr-layout">Układ: ' + escapeHtml(r.unit.layout) + '</p>' : '') +
+      (r.unit.source ? '<a class="fr-source" href="' + escapeHtml(r.unit.source) + '" target="_blank" rel="noopener">🔗 Zobacz ofertę u dewelopera</a>' : '<span class="fr-na">Brak linku do oferty</span>') +
+      '</div>' +
+
+      '<div class="fr-sect"><div class="fr-sect-title">C. Dopasowanie — ' + r.score + '%</div>' +
+      (r.missing.length
+        ? '<ul class="fr-cons">' + r.missing.map(m => '<li>➖ ' + escapeHtml(m) + '</li>').join('') + '</ul>'
+        : '<p class="fr-ok-line">Spełnia wszystkie zdefiniowane kryteria klienta.</p>') +
+      (r.unclear.length ? '<p class="fr-warn">Niejasne dane na stronie dewelopera: ' + escapeHtml(r.unclear.join('; ')) + '</p>' : '') +
+      '</div>' +
+    '</div>'
+  ).join('') + invNotes;
+}
+
+$$('.nav-item').forEach(function (btn) {
+  if (btn.dataset.view === 'research') btn.addEventListener('click', function () { initFastResearch(); });
 });
