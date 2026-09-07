@@ -1131,3 +1131,67 @@ html[data-theme="dark"] .fr-step { background: #232939; }
 html[data-theme="dark"] .fr-prefs-grid,
 html[data-theme="dark"] .fr-inv-card,
 html[data-theme="dark"] .fr-note { background: #232939; }
+
+/* ---------- Opisy etapów ---------- */
+.stage-row { display: grid; grid-template-columns: 1fr 1.7fr; gap: 14px; margin-bottom: 10px; }
+.stage-info {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-left: 6px; border-radius: 50%;
+  font-size: 11px; color: var(--text-muted); cursor: help; position: relative; flex-shrink: 0;
+}
+.stage-info:hover { color: var(--gold-dark); }
+.stage-info::after {
+  content: attr(data-tip);
+  position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: 250px; padding: 9px 12px;
+  background: var(--navy); color: #fff; font-size: 12px; font-weight: 500; line-height: 1.45;
+  border-radius: 8px; box-shadow: var(--shadow-lg); text-align: left;
+  opacity: 0; visibility: hidden; transition: opacity .15s; z-index: 60; pointer-events: none;
+}
+.stage-info:hover::after { opacity: 1; visibility: visible; }
+
+/* ---------- Priorytety zadań A/B/C ---------- */
+.prio-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0;
+  font-size: 11px; font-weight: 700; color: #fff; margin-right: 2px;
+}
+.prio-badge.prio-A { background: #DC2626; }
+.prio-badge.prio-B { background: #EA580C; }
+.prio-badge.prio-C { background: #16A34A; }
+.task-chip.prio-A, .task-row.prio-A, .goal-card.prio-A { background: rgba(220,38,38,.10); border-left: 3px solid #DC2626; }
+.task-chip.prio-B, .task-row.prio-B, .goal-card.prio-B { background: rgba(234,88,12,.10); border-left: 3px solid #EA580C; }
+.task-chip.prio-C, .task-row.prio-C, .goal-card.prio-C { background: rgba(22,163,74,.10); border-left: 3px solid #16A34A; }
+
+/* ---------- Ciemny motyw: wyższy kontrast tekstu ---------- */
+html[data-theme="dark"] {
+  --text: #F1F4FA;
+  --text-muted: #A8B2C4;
+  --border: #333B50;
+  --bg: #0F1219;
+  --surface: #191E2B;
+}
+html[data-theme="dark"] .settings-hint,
+html[data-theme="dark"] .subtitle,
+html[data-theme="dark"] .stat-hint,
+html[data-theme="dark"] .fr-inv-meta,
+html[data-theme="dark"] .task-row-meta,
+html[data-theme="dark"] .client-view-label,
+html[data-theme="dark"] .fr-k,
+html[data-theme="dark"] .script-col label { color: #A8B2C4; }
+html[data-theme="dark"] .fr-na { color: #8D97AB; }
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  background: #202636; color: var(--text); border-color: #3A4358;
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder { color: #78829A; }
+html[data-theme="dark"] .btn-ghost { background: #232939; color: var(--text); border-color: #3A4358; }
+html[data-theme="dark"] .btn-ghost:hover { background: #2B3346; }
+html[data-theme="dark"] .column { background: #161B26; }
+html[data-theme="dark"] .card { background: #202636; }
+html[data-theme="dark"] .stage-info::after { background: #2B3346; }
+html[data-theme="dark"] .task-chip.prio-A, html[data-theme="dark"] .task-row.prio-A { background: rgba(220,38,38,.18); }
+html[data-theme="dark"] .task-chip.prio-B, html[data-theme="dark"] .task-row.prio-B { background: rgba(234,88,12,.18); }
+html[data-theme="dark"] .task-chip.prio-C, html[data-theme="dark"] .task-row.prio-C { background: rgba(22,163,74,.18); }
