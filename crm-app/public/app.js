@@ -524,6 +524,7 @@ async function closeDeal(id, status) {
 }
 
 function openClientViewModal(id) {
+  window.__clientViewId = id;
   const c = clients.find(x => x.id === id);
   if (!c) return;
 
@@ -1996,4 +1997,94 @@ function frRenderReport() {
 
 $$('.nav-item').forEach(function (btn) {
   if (btn.dataset.view === 'research') btn.addEventListener('click', function () { initFastResearch(); });
+});
+
+
+// ===========================================================================
+// PREFERENCJE KLIENTA — okno edycji danych używanych przez Fast Research
+// ===========================================================================
+function openPrefsModal(clientId) {
+  const c = clients.find(x => x.id === clientId);
+  if (!c) return;
+  $('#prefs-client-id').value = c.id;
+  $('#prefs-client-name').textContent = c.imie + ' ' + c.nazwisko;
+
+  const set = (id, v) => { $(id).value = (v === null || v === undefined) ? '' : v; };
+  set('#prefs-budget-min', c.budget_min);
+  set('#prefs-budget-max', c.budget_max);
+  set('#prefs-locations', c.pref_locations);
+  set('#prefs-transit', c.max_transit_min);
+  set('#prefs-rooms-min', c.rooms_min);
+  set('#prefs-rooms-max', c.rooms_max);
+  set('#prefs-area-min', c.area_min);
+  set('#prefs-area-max', c.area_max);
+  set('#prefs-floor-min', c.floor_min);
+  set('#prefs-floor-max', c.floor_max);
+  set('#prefs-ready', c.ready_by);
+  // Uwagi opisowe: nowe pole, a jak puste — pokazujemy stare "preferencje",
+  // żeby nie zgubić tego, co agent wpisał przed rozbudową profilu.
+  set('#prefs-notes', c.pref_notes || c.preferencje || '');
+
+  $('#prefs-balcony').checked = Boolean(c.needs_balcony);
+  $('#prefs-parking').checked = Boolean(c.needs_parking);
+  $('#prefs-elevator').checked = Boolean(c.needs_elevator);
+
+  const w = c.pref_weights || {};
+  set('#prefs-w-price', w.price);
+  set('#prefs-w-rooms', w.rooms);
+  set('#prefs-w-area', w.area);
+  set('#prefs-w-floor', w.floor);
+
+  openModal('modal-prefs');
+}
+
+$('#client-view-prefs-btn').addEventListener('click', () => {
+  if (window.__clientViewId) openPrefsModal(window.__clientViewId);
+});
+
+$('#form-prefs').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id = $('#prefs-client-id').value;
+  const num = sel => { const v = $(sel).value.trim(); return v === '' ? null : Number(v); };
+
+  const weights = {};
+  [['price', '#prefs-w-price'], ['rooms', '#prefs-w-rooms'], ['area', '#prefs-w-area'], ['floor', '#prefs-w-floor']]
+    .forEach(pair => { const v = num(pair[1]); if (v !== null) weights[pair[0]] = v; });
+
+  const payload = {
+    budget_min: num('#prefs-budget-min'),
+    budget_max: num('#prefs-budget-max'),
+    pref_locations: $('#prefs-locations').value.trim(),
+    max_transit_min: num('#prefs-transit'),
+    rooms_min: num('#prefs-rooms-min'),
+    rooms_max: num('#prefs-rooms-max'),
+    area_min: num('#prefs-area-min'),
+    area_max: num('#prefs-area-max'),
+    floor_min: num('#prefs-floor-min'),
+    floor_max: num('#prefs-floor-max'),
+    ready_by: $('#prefs-ready').value.trim(),
+    needs_balcony: $('#prefs-balcony').checked,
+    needs_parking: $('#prefs-parking').checked,
+    needs_elevator: $('#prefs-elevator').checked,
+    pref_notes: $('#prefs-notes').value.trim(),
+    pref_weights: Object.keys(weights).length ? weights : null
+  };
+
+  if (payload.budget_min && payload.budget_max && payload.budget_min > payload.budget_max) {
+    toast('Budżet "od" nie może być większy niż "do".');
+    return;
+  }
+  if (payload.area_min && payload.area_max && payload.area_min > payload.area_max) {
+    toast('Metraż "od" nie może być większy niż "do".');
+    return;
+  }
+
+  try {
+    await api('/clients/' + id, { method: 'PUT', body: JSON.stringify(payload) });
+    await refreshAll();
+    closeModal('modal-prefs');
+    toast('Preferencje zapisane.');
+    // Jeśli Fast Research jest otwarty, odśwież podgląd preferencji.
+    if ($('#fr-prefs') && $('#view-research').classList.contains('active')) frRenderPrefs();
+  } catch (err) { toast(err.message); }
 });
