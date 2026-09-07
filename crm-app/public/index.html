@@ -568,6 +568,7 @@
     <div id="client-view-body"></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" data-close="modal-client-view">Zamknij</button>
+      <button type="button" class="btn btn-ghost" id="client-view-prefs-btn">Preferencje do Research</button>
       <button type="button" class="btn btn-primary" id="client-view-edit-btn">Edytuj kontakt</button>
     </div>
   </div>
@@ -667,6 +668,73 @@
         <button type="button" class="btn btn-danger" id="meeting-delete-btn" style="display:none; margin-right:auto;">Usuń</button>
         <button type="button" class="btn btn-ghost" data-close="modal-meeting">Anuluj</button>
         <button type="submit" class="btn btn-primary">Zapisz</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-prefs">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <h2>Preferencje klienta — <span id="prefs-client-name"></span></h2>
+      <button class="modal-close" data-close="modal-prefs">✕</button>
+    </div>
+    <form id="form-prefs">
+      <input type="hidden" id="prefs-client-id" />
+      <p class="settings-hint">Na tych danych opiera się dopasowanie w Fast Research. Puste pola nie odrzucają inwestycji — po prostu nie da się ich zweryfikować.</p>
+
+      <div class="prefs-section-title">Budżet i lokalizacja</div>
+      <div class="field-row">
+        <div class="field"><label for="prefs-budget-min">Budżet od (zł)</label><input type="number" id="prefs-budget-min" min="0" step="1000" /></div>
+        <div class="field"><label for="prefs-budget-max">Budżet do (zł)</label><input type="number" id="prefs-budget-max" min="0" step="1000" /></div>
+      </div>
+      <div class="field">
+        <label for="prefs-locations">Preferowane dzielnice / miasta</label>
+        <input type="text" id="prefs-locations" placeholder="np. Mokotów, Wilanów, Ursynów — oddziel przecinkiem" />
+      </div>
+      <div class="field">
+        <label for="prefs-transit">Maksymalny czas do komunikacji (min)</label>
+        <input type="number" id="prefs-transit" min="0" max="120" />
+      </div>
+
+      <div class="prefs-section-title">Mieszkanie</div>
+      <div class="field-row">
+        <div class="field"><label for="prefs-rooms-min">Pokoje od</label><input type="number" id="prefs-rooms-min" min="1" max="10" /></div>
+        <div class="field"><label for="prefs-rooms-max">Pokoje do</label><input type="number" id="prefs-rooms-max" min="1" max="10" /></div>
+        <div class="field"><label for="prefs-area-min">Metraż od (m²)</label><input type="number" id="prefs-area-min" min="0" step="0.5" /></div>
+        <div class="field"><label for="prefs-area-max">Metraż do (m²)</label><input type="number" id="prefs-area-max" min="0" step="0.5" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="prefs-floor-min">Piętro od</label><input type="number" id="prefs-floor-min" min="0" max="50" /></div>
+        <div class="field"><label for="prefs-floor-max">Piętro do</label><input type="number" id="prefs-floor-max" min="0" max="50" /></div>
+        <div class="field"><label for="prefs-ready">Termin oddania do</label><input type="text" id="prefs-ready" placeholder="np. 2027" /></div>
+      </div>
+
+      <div class="prefs-section-title">Priorytety</div>
+      <div class="prefs-checks">
+        <label class="weekday-opt"><input type="checkbox" id="prefs-balcony" /><span>Balkon / taras / ogródek</span></label>
+        <label class="weekday-opt"><input type="checkbox" id="prefs-parking" /><span>Miejsce parkingowe</span></label>
+        <label class="weekday-opt"><input type="checkbox" id="prefs-elevator" /><span>Winda</span></label>
+      </div>
+
+      <div class="prefs-section-title">Wagi kryteriów (opcjonalnie)</div>
+      <p class="settings-hint">Im wyższa liczba, tym mocniej kryterium wpływa na % dopasowania. Zostaw puste, żeby użyć domyślnych.</p>
+      <div class="field-row">
+        <div class="field"><label for="prefs-w-price">Cena</label><input type="number" id="prefs-w-price" min="0" max="100" placeholder="30" /></div>
+        <div class="field"><label for="prefs-w-rooms">Pokoje</label><input type="number" id="prefs-w-rooms" min="0" max="100" placeholder="25" /></div>
+        <div class="field"><label for="prefs-w-area">Metraż</label><input type="number" id="prefs-w-area" min="0" max="100" placeholder="25" /></div>
+        <div class="field"><label for="prefs-w-floor">Piętro</label><input type="number" id="prefs-w-floor" min="0" max="100" placeholder="10" /></div>
+      </div>
+
+      <div class="prefs-section-title">Dane Klienta — uwagi opisowe</div>
+      <div class="field">
+        <label for="prefs-notes">Wszystko, co nie mieści się w polach wyżej</label>
+        <textarea id="prefs-notes" rows="4" placeholder="np. blisko szkoły, cicha okolica, nie parter, wykończenie pod klucz..."></textarea>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close="modal-prefs">Anuluj</button>
+        <button type="submit" class="btn btn-primary">Zapisz preferencje</button>
       </div>
     </form>
   </div>
