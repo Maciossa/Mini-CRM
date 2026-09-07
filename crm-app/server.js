@@ -602,9 +602,88 @@ function parseMoney(str) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+// Lista samych linków to najczęstszy format, jaki dostają agenci. Adresy
+// bywają łamane na dwie linie, a czasem dwa sklejone w jednej - dlatego
+// sklejamy cały tekst i tniemy dopiero na granicach "http".
+function looksLikeUrlList(text) {
+  const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return false;
+  const withUrl = lines.filter(l => /https?:\/\//i.test(l)).length;
+  return withUrl / lines.length > 0.5;
+}
+
+function prettifySlug(slug) {
+  return String(slug)
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .map(w => w.length > 2 ? w.charAt(0).toUpperCase() + w.slice(1) : w)
+    .join(' ');
+}
+
+const GENERIC_SEGMENTS = ['pl', 'pl-pl', 'inwestycje', 'inwestycja', 'investments', 'oferta',
+  'mieszkania', 'nasze-projekty', 'nasze-realizacje', 'lista-inwestycji', 'warszawa', 'i', 'o-inwestycji'];
+
+function parseInvestmentsFromUrlList(text) {
+  const glued = String(text).replace(/\s+/g, '');
+  const parts = glued.split(/(?=https?:\/\/)/i).filter(u => /^https?:\/\//i.test(u));
+  const seen = {};
+  const out = [];
+
+  parts.forEach(function (raw) {
+    let url = raw.replace(/[).,;]+$/, '');
+    let host, path;
+    try {
+      const u = new URL(url);
+      host = u.hostname.replace(/^www\./i, '');
+      path = u.pathname;
+    } catch (e) { return; }
+
+    // Klucz bez parametrow - te same inwestycje bywaja w PDF dwa razy
+    const key = host + path.replace(/\/$/, '');
+    if (seen[key]) return;
+    seen[key] = true;
+
+    const segs = path.split('/').filter(Boolean).map(s => decodeURIComponent(s));
+    const meaningful = segs.filter(s => GENERIC_SEGMENTS.indexOf(s.toLowerCase()) === -1 && !/^\d+$/.test(s));
+    const brand = host.split('.')[0];
+
+    const name = meaningful.length
+      ? prettifySlug(meaningful[meaningful.length - 1])
+      : prettifySlug(brand);
+
+    out.push({
+      id: 'inv-' + (out.length + 1),
+      name: name,
+      developer: prettifySlug(brand),
+      location: /warszawa/i.test(url) ? 'Warszawa' : null,
+      price_min: null,
+      price_max: null,
+      price_per_m2: null,
+      area_min: null,
+      area_max: null,
+      rooms_min: null,
+      rooms_max: null,
+      ready: null,
+      transit_min: null,
+      url: url,
+      raw: url
+    });
+  });
+
+  return out;
+}
+
 function parseInvestmentsFromPdfText(text) {
   const clean = String(text || '').replace(/\r/g, '');
   if (!clean.trim()) return [];
+
+  // Lista linkow wymaga zupelnie innego parsowania niz opisowa lista inwestycji.
+  if (looksLikeUrlList(clean)) {
+    const byUrl = parseInvestmentsFromUrlList(clean);
+    if (byUrl.length) return byUrl;
+  }
 
   // Blok = fragment zaczynający się od linii wyglądającej na nazwę inwestycji
   // (Wielka litera, nie kończy się kropką, rozsądna długość).
