@@ -124,6 +124,7 @@ function publicProfile(p) {
     rynek: p.rynek,
     prowizja_agenta: p.prowizja_agenta || 50,
     stages: (Array.isArray(p.stages) && p.stages.length === STAGES.length) ? p.stages : STAGES,
+    stageDescriptions: (Array.isArray(p.stageDescriptions) && p.stageDescriptions.length === STAGES.length) ? p.stageDescriptions : STAGES.map(function () { return ''; }),
     theme: p.theme === 'dark' ? 'dark' : 'light'
   };
 }
@@ -279,14 +280,15 @@ app.get('/api/profiles/me', requireProfile, (req, res) => {
 
 const ALLOWED_SPLITS = [45, 50, 55, 60];
 app.put('/api/profiles/me/settings', requireProfile, (req, res) => {
-  const { prowizja_agenta, stages, theme } = req.body;
+  const { prowizja_agenta, stages, stageDescriptions, theme } = req.body;
   const updates = {};
   if (prowizja_agenta !== undefined) {
+    // Gotowe opcje to tylko skrot - agent moze wpisac dowolna wartosc.
     const val = Number(prowizja_agenta);
-    if (!ALLOWED_SPLITS.includes(val)) {
-      return res.status(400).json({ error: 'Podzial prowizji musi wynosic 45%, 50%, 55% lub 60%.' });
+    if (!Number.isFinite(val) || val <= 0 || val > 100) {
+      return res.status(400).json({ error: 'Podział prowizji musi być liczbą od 1 do 100.' });
     }
-    updates.prowizja_agenta = val;
+    updates.prowizja_agenta = Math.round(val * 100) / 100;
   }
   if (stages !== undefined) {
     if (!Array.isArray(stages) || stages.length !== STAGES.length) {
@@ -311,6 +313,13 @@ app.put('/api/profiles/me/settings', requireProfile, (req, res) => {
     });
     updates.stages = cleaned;
   }
+  if (stageDescriptions !== undefined) {
+    if (!Array.isArray(stageDescriptions) || stageDescriptions.length !== STAGES.length) {
+      return res.status(400).json({ error: `Lista opisów musi zawierać dokładnie ${STAGES.length} pozycji.` });
+    }
+    updates.stageDescriptions = stageDescriptions.map(d => String(d || '').trim().slice(0, 400));
+  }
+
   if (theme !== undefined) {
     if (!['light', 'dark'].includes(theme)) {
       return res.status(400).json({ error: 'Nieprawidlowy motyw.' });
@@ -1282,6 +1291,10 @@ function sanitizePlanner(body, existing) {
   if (body.done_dates !== undefined) {
     out.done_dates = Array.isArray(body.done_dates) ? body.done_dates.map(String) : [];
   }
+  if (body.priority !== undefined) {
+    const p = String(body.priority || '').toUpperCase();
+    out.priority = ['A', 'B', 'C'].includes(p) ? p : null;
+  }
   if (body.done !== undefined) out.done = Boolean(body.done);
   const title = out.title !== undefined ? out.title : (existing && existing.title);
   if (!title) return { error: 'Nazwa zadania jest wymagana.' };
@@ -1307,6 +1320,7 @@ app.post('/api/planner', (req, res) => {
     time_end: null,
     recurrence: 'none',
     weekdays: [],
+    priority: null,
     done: false,
     done_dates: [],
     created_at: now(),
