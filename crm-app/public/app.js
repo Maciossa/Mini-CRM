@@ -270,7 +270,8 @@ function renderStatisticsView() {
 
 async function renderSettingsView() {
   if (!currentProfile) return;
-  $('#settings-split').value = String(currentProfile.prowizja_agenta || 50);
+  if (typeof applySplitToForm === 'function') applySplitToForm();
+  else $('#settings-split').value = String(currentProfile.prowizja_agenta || 50);
 
   try {
     const status = await (await fetch('/api/system/status')).json();
@@ -2088,3 +2089,207 @@ $('#form-prefs').addEventListener('submit', async e => {
     if ($('#fr-prefs') && $('#view-research').classList.contains('active')) frRenderPrefs();
   } catch (err) { toast(err.message); }
 });
+
+
+// ===========================================================================
+// OPISY ETAPÓW, PRIORYTETY ZADAŃ, WŁASNY PODZIAŁ PROWIZJI
+// ===========================================================================
+
+// --- Podział prowizji: gotowe opcje + własna wartość ---
+(function initCustomSplit() {
+  const sel = $('#settings-split');
+  const custom = $('#settings-split-custom');
+  if (!sel || !custom) return;
+
+  const syncVisibility = () => {
+    const isCustom = sel.value === 'custom';
+    custom.style.display = isCustom ? 'block' : 'none';
+    if (isCustom) custom.focus();
+  };
+  sel.addEventListener('change', syncVisibility);
+
+  // Nadpisujemy stary handler: podmieniamy przycisk na klon, żeby usunąć
+  // wcześniejsze nasłuchy zapisujące tylko wartość z listy.
+  const oldBtn = $('#btn-save-split');
+  if (!oldBtn) return;
+  const btn = oldBtn.cloneNode(true);
+  oldBtn.parentNode.replaceChild(btn, oldBtn);
+
+  btn.addEventListener('click', async () => {
+    const raw = sel.value === 'custom' ? custom.value.replace(',', '.') : sel.value;
+    const val = Number(raw);
+    if (!Number.isFinite(val) || val <= 0 || val > 100) {
+      toast('Podaj podział prowizji jako liczbę od 1 do 100.');
+      return;
+    }
+    try {
+      const data = await api('/profiles/me/settings', { method: 'PUT', body: JSON.stringify({ prowizja_agenta: val }) });
+      currentProfile = data;
+      toast('Podział prowizji ustawiony na ' + val + '%.');
+      renderSettingsView();
+    } catch (err) { toast(err.message); }
+  });
+})();
+
+// Ustawia listę na wartość profilu; nietypowe % trafiają do pola własnego.
+function applySplitToForm() {
+  const sel = $('#settings-split');
+  const custom = $('#settings-split-custom');
+  if (!sel || !custom || !currentProfile) return;
+  const val = Number(currentProfile.prowizja_agenta) || 50;
+  const preset = ['45', '50', '55', '60'];
+  if (preset.includes(String(val))) {
+    sel.value = String(val);
+    custom.style.display = 'none';
+    custom.value = '';
+  } else {
+    sel.value = 'custom';
+    custom.style.display = 'block';
+    custom.value = val;
+  }
+}
+
+// --- Opisy etapów w Settings ---
+function renderStageSettings() {
+  const box = $('#settings-stages-list');
+  if (!box) return;
+  const names = (currentProfile && Array.isArray(currentProfile.stages) && currentProfile.stages.length) ? currentProfile.stages : STAGES;
+  const descs = (currentProfile && Array.isArray(currentProfile.stageDescriptions)) ? currentProfile.stageDescriptions : names.map(function () { return ''; });
+  box.innerHTML = names.map(function (name, i) {
+    return '<div class="stage-row">' +
+      '<div class="field"><label for="stage-name-' + i + '">Etap ' + (i + 1) + '</label>' +
+      '<input type="text" id="stage-name-' + i + '" class="stage-name-input" value="' + escapeHtml(name) + '" /></div>' +
+      '<div class="field"><label for="stage-desc-' + i + '">Opis (pokaże się po najechaniu na ⓘ)</label>' +
+      '<input type="text" id="stage-desc-' + i + '" class="stage-desc-input" placeholder="np. klient po prezentacji, czeka na decyzję" value="' + escapeHtml(descs[i] || '') + '" /></div>' +
+      '</div>';
+  }).join('');
+}
+
+(function initStagesSave() {
+  const oldBtn = $('#btn-save-stages');
+  if (!oldBtn) return;
+  const btn = oldBtn.cloneNode(true);
+  oldBtn.parentNode.replaceChild(btn, oldBtn);
+
+  btn.addEventListener('click', async () => {
+    const stages = $$('.stage-name-input').map(i => i.value.trim());
+    const stageDescriptions = $$('.stage-desc-input').map(i => i.value.trim());
+    if (stages.some(v => !v)) { toast('Nazwy etapów nie mogą być puste.'); return; }
+    try {
+      const data = await api('/profiles/me/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ stages: stages, stageDescriptions: stageDescriptions })
+      });
+      currentProfile = data;
+      STAGES = data.stages;
+      Object.keys(STAGE_COLORS).forEach(k => delete STAGE_COLORS[k]);
+      STAGES.forEach(function (st, i) { STAGE_COLORS[st] = 'var(--stage-' + (i + 1) + ')'; });
+      const sel = $('#lead-stage');
+      if (sel) sel.innerHTML = STAGES.map(st => '<option value="' + escapeHtml(st) + '">' + escapeHtml(st) + '</option>').join('');
+      await refreshAll();
+      renderBoard();
+      renderStageSettings();
+      toast('Etapy i opisy zapisane.');
+    } catch (err) { toast(err.message); }
+  });
+})();
+
+// --- Znaczek ⓘ z opisem na kolumnach kanbanu ---
+function decorateBoardWithStageInfo() {
+  const descs = (currentProfile && Array.isArray(currentProfile.stageDescriptions)) ? currentProfile.stageDescriptions : [];
+  if (!descs.length) return;
+  $$('.column').forEach(function (col) {
+    const name = col.dataset.stage;
+    const idx = STAGES.indexOf(name);
+    const desc = idx >= 0 ? descs[idx] : '';
+    const head = col.querySelector('.column-title');
+    if (!head || head.querySelector('.stage-info') || !desc) return;
+    const badge = document.createElement('span');
+    badge.className = 'stage-info';
+    badge.textContent = 'ⓘ';
+    badge.setAttribute('data-tip', desc);
+    head.appendChild(badge);
+  });
+}
+
+// Znaczek ⓘ dorysowujemy po każdym renderze tablicy.
+(function hookBoardInfo() {
+  const orig = renderBoard;
+  renderBoard = function () {
+    orig.apply(this, arguments);
+    decorateBoardWithStageInfo();
+  };
+})();
+
+// --- Priorytety A/B/C w Plannerze ---
+(function hookPlannerPriority() {
+  const origCal = renderPlannerCalendar;
+  renderPlannerCalendar = function () {
+    origCal.apply(this, arguments);
+    applyPriorityStyling();
+  };
+  const origList = renderPlannerList;
+  renderPlannerList = function () {
+    origList.apply(this, arguments);
+    applyPriorityStyling();
+  };
+})();
+
+function applyPriorityStyling() {
+  $$('.task-chip, .task-row, .goal-card').forEach(function (el) {
+    let id = el.dataset.id;
+    if (!id) {
+      const chk = el.querySelector('.task-check');
+      if (chk) id = chk.dataset.id;
+    }
+    if (!id) return;
+    const t = plannerTasks.find(function (x) { return x.id === id; });
+    el.classList.remove('prio-A', 'prio-B', 'prio-C');
+    if (t && t.priority) {
+      el.classList.add('prio-' + t.priority);
+      if (!el.querySelector('.prio-badge')) {
+        const b = document.createElement('span');
+        b.className = 'prio-badge prio-' + t.priority;
+        b.textContent = t.priority;
+        el.insertBefore(b, el.firstChild);
+      }
+    }
+  });
+}
+
+// Priorytet w formularzu zadania
+(function hookTaskPriority() {
+  const origOpen = openTaskModal;
+  openTaskModal = function (id, preset) {
+    origOpen(id, preset);
+    const sel = $('#task-priority');
+    if (!sel) return;
+    const t = id ? plannerTasks.find(function (x) { return x.id === id; }) : null;
+    sel.value = (t && t.priority) ? t.priority : '';
+  };
+
+  const form = $('#form-task');
+  if (!form) return;
+  form.addEventListener('submit', function () {
+    window.__pendingPriority = $('#task-priority') ? ($('#task-priority').value || null) : null;
+  }, true);
+})();
+
+// api() dokleja priorytet do żądań plannera — dzięki temu nie duplikujemy
+// całej obsługi formularza tylko po to, żeby dodać jedno pole.
+(function patchApiForPriority() {
+  const origApi = api;
+  api = async function (path, options) {
+    if (options && options.body && /^\/planner(\/|$)/.test(path) && window.__pendingPriority !== undefined) {
+      try {
+        const body = JSON.parse(options.body);
+        if (body.title !== undefined) {
+          body.priority = window.__pendingPriority;
+          options = Object.assign({}, options, { body: JSON.stringify(body) });
+          window.__pendingPriority = undefined;
+        }
+      } catch (e) { /* nie ruszamy żądań, których nie da się sparsować */ }
+    }
+    return origApi(path, options);
+  };
+})();
