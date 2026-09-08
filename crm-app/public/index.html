@@ -238,7 +238,9 @@
               <option value="50">50%</option>
               <option value="55">55%</option>
               <option value="60">60%</option>
+              <option value="custom">Własna wartość…</option>
             </select>
+            <input type="number" id="settings-split-custom" min="1" max="100" step="0.5" placeholder="np. 47,5" style="display:none; max-width:130px;" />
             <button class="btn btn-primary" id="btn-save-split">Zapisz</button>
           </div>
         </div>
@@ -605,6 +607,15 @@
     <form id="form-task">
       <input type="hidden" id="task-id" />
       <div class="field"><label for="task-title">Nazwa zadania *</label><input type="text" id="task-title" required /></div>
+      <div class="field">
+        <label for="task-priority">Ważność</label>
+        <select id="task-priority">
+          <option value="">Bez priorytetu</option>
+          <option value="A">A — najwyższa</option>
+          <option value="B">B — średnia</option>
+          <option value="C">C — niska</option>
+        </select>
+      </div>
       <div class="field">
         <label for="task-scope">Rodzaj</label>
         <select id="task-scope">
