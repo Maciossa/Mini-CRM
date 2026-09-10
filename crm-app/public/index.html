@@ -29,9 +29,41 @@
         <p class="auth-error" id="acc-login-error"></p>
         <button type="submit" class="btn btn-primary auth-full-btn">Zaloguj się</button>
       </form>
+      <p class="auth-switch"><button type="button" class="link-btn" id="btn-show-forgot">Nie pamiętam hasła</button></p>
       <p class="auth-switch">Nie masz konta? <button type="button" class="link-btn" id="btn-show-acc-register">Zarejestruj się</button></p>
       <p class="auth-switch"><a class="link-btn" href="/landing.html" style="text-decoration:none;">Czym jest Real Estate CRM?</a></p>
     </div>
+    <div id="account-forgot" style="display:none;">
+      <p class="auth-subtitle">Podaj adres mail konta — wyślemy na niego link do ustawienia nowego hasła.</p>
+      <form id="form-forgot">
+        <div class="field">
+          <label for="forgot-mail">Mail</label>
+          <input type="email" id="forgot-mail" required />
+        </div>
+        <p class="auth-error" id="forgot-error"></p>
+        <p class="auth-ok" id="forgot-ok"></p>
+        <button type="submit" class="btn btn-primary auth-full-btn">Wyślij link</button>
+      </form>
+      <p class="auth-switch"><button type="button" class="link-btn" id="btn-back-to-login">← Wróć do logowania</button></p>
+    </div>
+
+    <div id="account-reset" style="display:none;">
+      <p class="auth-subtitle">Ustaw nowe hasło do swojego konta.</p>
+      <form id="form-reset">
+        <div class="field">
+          <label for="reset-password">Nowe hasło</label>
+          <input type="password" id="reset-password" minlength="6" required autofocus />
+        </div>
+        <div class="field">
+          <label for="reset-password2">Powtórz nowe hasło</label>
+          <input type="password" id="reset-password2" minlength="6" required />
+        </div>
+        <p class="auth-error" id="reset-error"></p>
+        <button type="submit" class="btn btn-primary auth-full-btn">Zapisz nowe hasło</button>
+      </form>
+      <p class="auth-switch"><button type="button" class="link-btn" id="btn-reset-cancel">← Wróć do logowania</button></p>
+    </div>
+
     <div id="account-register" style="display:none;">
       <p class="auth-subtitle">Stwórz konto, aby uzyskać dostęp do swojego prywatnego CRM.</p>
       <form id="form-account-register">
