@@ -1289,3 +1289,5 @@ html[data-theme="dark"] .stage-info::after { background: #2B3346; }
 html[data-theme="dark"] .task-chip.prio-A, html[data-theme="dark"] .task-row.prio-A { background: rgba(220,38,38,.18); }
 html[data-theme="dark"] .task-chip.prio-B, html[data-theme="dark"] .task-row.prio-B { background: rgba(234,88,12,.18); }
 html[data-theme="dark"] .task-chip.prio-C, html[data-theme="dark"] .task-row.prio-C { background: rgba(22,163,74,.18); }
+
+.auth-ok { color: #15803D; font-size: 13px; min-height: 18px; margin: 0 0 10px; line-height: 1.5; }
