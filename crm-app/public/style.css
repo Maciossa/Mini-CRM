@@ -868,13 +868,107 @@ input, textarea, select { font-family: inherit; }
 ::-webkit-scrollbar-thumb { background: #D5D8E2; border-radius: 8px; }
 
 /* ---------- Responsive ---------- */
-@media (max-width: 720px) {
-  .app { flex-direction: column; }
-  .sidebar { width: 100%; flex-direction: row; align-items: center; padding: 12px 16px; }
-  .brand { padding-bottom: 0; }
-  .nav-items { flex-direction: row; margin-left: auto; }
-  .sidebar-footer { display: none; }
-  .content { padding: 20px; }
+/* ===========================================================================
+   WERSJA MOBILNA — telefon
+   Panel boczny staje sie dolnym paskiem (kciuk siega tam najlatwiej),
+   a wszystkie uklady dwukolumnowe skladaja sie do jednej kolumny.
+   =========================================================================== */
+@media (max-width: 820px) {
+  .app { flex-direction: column; height: auto; min-height: 100vh; overflow: visible; }
+
+  /* Dolny pasek nawigacji, przewijany w poziomie */
+  .sidebar {
+    width: 100%;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 50;
+    flex-direction: row;
+    align-items: stretch;
+    padding: 0;
+    height: 62px;
+    box-shadow: 0 -2px 12px rgba(0,0,0,.25);
+  }
+  .brand, .sidebar-footer { display: none; }
+  .nav-items {
+    flex-direction: row;
+    margin: 0;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .nav-items::-webkit-scrollbar { display: none; }
+  .nav-item {
+    flex-direction: column;
+    gap: 3px;
+    justify-content: center;
+    min-width: 72px;
+    padding: 8px 6px;
+    font-size: 10px;
+    text-align: center;
+    border-radius: 0;
+    white-space: nowrap;
+  }
+  .nav-icon { font-size: 17px; }
+
+  .content { padding: 16px 14px 86px; }
+  .view-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .view-header h1 { font-size: 22px; }
+  .view-header .btn { width: 100%; }
+
+  /* Kanban: kolumny na pelna szerokosc ekranu z przyciaganiem */
+  .board { scroll-snap-type: x mandatory; gap: 12px; }
+  .column { min-width: 85vw; scroll-snap-align: start; }
+
+  /* Tabela kontaktow przewijana w poziomie zamiast lamania */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .contacts-table { min-width: 780px; }
+
+  /* Formularze i okna */
+  .field-row { flex-direction: column; gap: 0; }
+  .modal { width: 100%; max-width: 100%; max-height: 92vh; border-radius: 14px 14px 0 0; }
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal-actions { flex-wrap: wrap; gap: 8px; }
+  .modal-actions .btn { flex: 1; min-width: 120px; }
+
+  /* Siatki, ktore musza zejsc do jednej kolumny */
+  .stats-grid,
+  .goal-grid,
+  .fr-grid,
+  .fr-prefs-grid { grid-template-columns: 1fr; }
+  .stage-row,
+  .script-stage-body { grid-template-columns: 1fr; gap: 8px; }
+
+  /* Planner */
+  .hour-label { width: 46px; font-size: 10.5px; padding: 8px 6px; }
+  .planner-day-label { min-width: auto; font-size: 13.5px; }
+  .planner-toolbar { gap: 10px; }
+  .planner-scopes, .planner-modes { width: 100%; overflow-x: auto; }
+
+  /* Fast Research */
+  .fr-panel { padding: 16px 14px; }
+  .fr-steps { gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+  .fr-step { flex-shrink: 0; font-size: 11.5px; padding: 7px 12px; }
+  .fr-result { padding: 14px 15px; }
+
+  /* Practice */
+  .sl-wrap { padding: 34px 16px 46px; }
+  .sl-label { font-size: 10px; }
+  .practice-tabs { width: 100%; }
+  .practice-tab { flex: 1; padding: 8px 10px; }
+
+  /* Dymek opisu etapu nie moze wyjechac poza ekran */
+  .stage-info::after { max-width: 62vw; left: auto; right: 0; transform: none; }
+
+  /* Wykres statystyk */
+  .chart-col-label, .chart-col-conv { font-size: 9px; }
+}
+
+/* Bardzo waskie ekrany */
+@media (max-width: 380px) {
+  .content { padding: 14px 10px 86px; }
+  .column { min-width: 90vw; }
+  .nav-item { min-width: 64px; font-size: 9.5px; }
 }
 
 
