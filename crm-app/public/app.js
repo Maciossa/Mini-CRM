@@ -36,7 +36,7 @@ async function bootstrap() {
   showAuthScreen('account-login');
 }
 
-const AUTH_STATES = ['account-login', 'account-register', 'profile-picker', 'profile-create'];
+const AUTH_STATES = ['account-login', 'account-register', 'profile-picker', 'profile-create', 'account-forgot', 'account-reset'];
 function showAuthScreen(state) {
   $('#app-root').style.display = 'none';
   $('#auth-screen').style.display = 'flex';
@@ -2292,4 +2292,85 @@ function applyPriorityStyling() {
     }
     return origApi(path, options);
   };
+})();
+
+
+// ===========================================================================
+// RESETOWANIE HASŁA
+// ===========================================================================
+let resetToken = null;
+
+$('#btn-show-forgot').addEventListener('click', () => {
+  $('#forgot-error').textContent = '';
+  $('#forgot-ok').textContent = '';
+  $('#forgot-mail').value = $('#acc-login-mail').value || '';
+  showAuthScreen('account-forgot');
+});
+
+$('#btn-back-to-login').addEventListener('click', () => showAuthScreen('account-login'));
+
+$('#btn-reset-cancel').addEventListener('click', () => {
+  resetToken = null;
+  // Czyscimy token z adresu, zeby nie zostal w historii przegladarki.
+  history.replaceState({}, '', location.pathname);
+  showAuthScreen('account-login');
+});
+
+$('#form-forgot').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  const err = $('#forgot-error');
+  const ok = $('#forgot-ok');
+  err.textContent = '';
+  ok.textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'Wysyłam…';
+  try {
+    const data = await api('/account/forgot', {
+      method: 'POST',
+      body: JSON.stringify({ mail: $('#forgot-mail').value.trim() })
+    });
+    ok.textContent = data.message;
+  } catch (e2) {
+    err.textContent = e2.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Wyślij link';
+  }
+});
+
+$('#form-reset').addEventListener('submit', async e => {
+  e.preventDefault();
+  const err = $('#reset-error');
+  const p1 = $('#reset-password').value;
+  const p2 = $('#reset-password2').value;
+  err.textContent = '';
+  if (p1 !== p2) { err.textContent = 'Hasła nie są takie same.'; return; }
+  if (p1.length < 6) { err.textContent = 'Hasło musi mieć co najmniej 6 znaków.'; return; }
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = 'Zapisuję…';
+  try {
+    await api('/account/reset', { method: 'POST', body: JSON.stringify({ token: resetToken, password: p1 }) });
+    resetToken = null;
+    history.replaceState({}, '', location.pathname);
+    toast('Hasło zmienione. Jesteś zalogowany.');
+    // Reset od razu tworzy sesje - przechodzimy do wyboru profilu.
+    await bootstrap();
+  } catch (e2) {
+    err.textContent = e2.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Zapisz nowe hasło';
+  }
+});
+
+// Wejscie z linku z maila: /?reset=TOKEN
+(function checkResetLink() {
+  const token = new URLSearchParams(location.search).get('reset');
+  if (!token) return;
+  resetToken = token;
+  // Ekran resetu musi wygrac z automatycznym logowaniem z ciasteczka.
+  setTimeout(() => showAuthScreen('account-reset'), 60);
 })();
