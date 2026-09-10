@@ -89,6 +89,7 @@ db.defaults({
   researchPdfs: [],
   activities: [],
   accounts: [],
+  passwordResets: [],
   profiles: [],
   researchReports: [],
   meta: {}
@@ -208,6 +209,127 @@ app.post('/api/account/login', async (req, res) => {
   if (!ok) return res.status(401).json({ error: 'Nieprawidlowy mail lub haslo.' });
   issueSession(res, { accountId: account.id });
   res.json(publicAccount(account));
+});
+
+// ===========================================================================
+// RESETOWANIE HASŁA
+// Token trzymamy wyłącznie jako skrót SHA-256 — wyciek bazy nie pozwoli
+// przejąć konta. Token jest jednorazowy i wygasa po godzinie.
+// ===========================================================================
+const RESET_TTL_MS = 60 * 60 * 1000;
+const RESET_MAX_PER_HOUR = 3;
+
+function hashToken(raw) {
+  return crypto.createHash('sha256').update(String(raw)).digest('hex');
+}
+
+function appBaseUrl(req) {
+  if (process.env.APP_URL) return String(process.env.APP_URL).replace(/\/$/, '');
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  return proto + '://' + req.headers.host;
+}
+
+// Wysylka przez Resend. Bez klucza link ladnie tylko w logu serwera -
+// swiadomie NIE zwracamy go w odpowiedzi, bo pozwoliloby to obcej osobie
+// zresetowac cudze haslo samym znajomym adresem mail.
+async function sendResetMail(toMail, link) {
+  const key = process.env.RESEND_API_KEY;
+  const from = process.env.RESET_MAIL_FROM || 'Real Estate CRM <onboarding@resend.dev>';
+  if (!key) {
+    console.log('[reset hasla] Brak RESEND_API_KEY. Link dla ' + toMail + ': ' + link);
+    return { sent: false, reason: 'brak-klucza' };
+  }
+  try {
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+      body: JSON.stringify({
+        from: from,
+        to: [toMail],
+        subject: 'Reset hasła — Real Estate CRM',
+        html:
+          '<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1B2340">' +
+          '<h2 style="color:#1B2340">Reset hasła</h2>' +
+          '<p>Otrzymaliśmy prośbę o zmianę hasła do Twojego konta w Real Estate CRM.</p>' +
+          '<p style="margin:26px 0"><a href="' + link + '" style="background:#C9962E;color:#fff;padding:13px 26px;border-radius:8px;text-decoration:none;font-weight:bold">Ustaw nowe hasło</a></p>' +
+          '<p style="font-size:13px;color:#6B7280">Link jest ważny przez godzinę i zadziała tylko raz.</p>' +
+          '<p style="font-size:13px;color:#6B7280">Jeśli to nie Ty prosiłeś o reset, zignoruj tę wiadomość — hasło pozostanie bez zmian.</p>' +
+          '</div>'
+      })
+    });
+    if (!resp.ok) {
+      const body = await resp.text();
+      console.error('[reset hasla] Resend odrzucil wysylke: ' + resp.status + ' ' + body.slice(0, 300));
+      return { sent: false, reason: 'blad-dostawcy' };
+    }
+    return { sent: true };
+  } catch (e) {
+    console.error('[reset hasla] Blad wysylki: ' + e.message);
+    return { sent: false, reason: 'wyjatek' };
+  }
+}
+
+app.post('/api/account/forgot', async (req, res) => {
+  const mailNorm = String(req.body.mail || '').trim().toLowerCase();
+  // Zawsze ta sama odpowiedz - inaczej formularz zdradzalby, ktore adresy
+  // sa zarejestrowane.
+  const generic = { ok: true, message: 'Jeśli konto z tym adresem istnieje, wysłaliśmy na niego link do zmiany hasła.' };
+  if (!mailNorm) return res.json(generic);
+
+  const account = db.get('accounts').find(a => a.mail.toLowerCase() === mailNorm).value();
+  if (!account) return res.json(generic);
+
+  // Limit prob: chroni przed zasypaniem czyjejs skrzynki.
+  const hourAgo = Date.now() - RESET_TTL_MS;
+  const recent = db.get('passwordResets')
+    .filter(r => r.account_id === account.id && new Date(r.created_at).getTime() > hourAgo)
+    .value();
+  if (recent.length >= RESET_MAX_PER_HOUR) return res.json(generic);
+
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  db.get('passwordResets').push({
+    id: uuidv4(),
+    account_id: account.id,
+    token_hash: hashToken(rawToken),
+    created_at: now(),
+    expires_at: new Date(Date.now() + RESET_TTL_MS).toISOString(),
+    used_at: null
+  }).write();
+
+  const link = appBaseUrl(req) + '/?reset=' + rawToken;
+  await sendResetMail(account.mail, link);
+  res.json(generic);
+});
+
+app.post('/api/account/reset', async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) {
+    return res.status(400).json({ error: 'Token i nowe hasło są wymagane.' });
+  }
+  if (String(password).length < 6) {
+    return res.status(400).json({ error: 'Hasło musi mieć co najmniej 6 znaków.' });
+  }
+
+  const rec = db.get('passwordResets').find({ token_hash: hashToken(token) }).value();
+  if (!rec || rec.used_at || new Date(rec.expires_at).getTime() < Date.now()) {
+    return res.status(400).json({ error: 'Link wygasł lub został już wykorzystany. Poproś o nowy.' });
+  }
+
+  const account = db.get('accounts').find({ id: rec.account_id }).value();
+  if (!account) return res.status(400).json({ error: 'Konto nie istnieje.' });
+
+  const password_hash = await bcrypt.hash(String(password), 10);
+  db.get('accounts').find({ id: account.id }).assign({ password_hash }).write();
+  db.get('passwordResets').find({ id: rec.id }).assign({ used_at: now() }).write();
+  // Pozostale tokeny tego konta uniewazniamy - po zmianie hasla stare linki
+  // nie moga juz dzialac.
+  db.get('passwordResets')
+    .filter(r => r.account_id === account.id && !r.used_at)
+    .forEach(r => { r.used_at = now(); })
+    .write();
+
+  issueSession(res, { accountId: account.id });
+  res.json({ ok: true, mail: account.mail });
 });
 
 app.post('/api/account/logout', (req, res) => {
