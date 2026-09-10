@@ -980,45 +980,103 @@ function prefsSummary(cr) {
   return p.join('; ');
 }
 
-async function aiFindUnits(inv, cr) {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return null;
-  try {
-    const prompt =
-      'Jestes asystentem agenta nieruchomosci. Znajdz AKTUALNIE DOSTEPNE mieszkania w konkretnej inwestycji.\n\n' +
-      'INWESTYCJA: ' + inv.name + '\n' +
-      'DEWELOPER: ' + (inv.developer || 'nieznany - ustal') + '\n' +
-      'LOKALIZACJA: ' + (inv.location || 'nieznana') + '\n' +
-      'STRONA: ' + (inv.url || 'nieznana - znajdz oficjalna strone tej inwestycji') + '\n\n' +
-      'PREFERENCJE KLIENTA: ' + prefsSummary(cr) + '\n\n' +
-      'ZASADY (krytyczne):\n' +
-      '1. Szukaj WYLACZNIE na oficjalnej stronie tego dewelopera/inwestycji.\n' +
-      '2. NIE WYMYSLAJ mieszkan. Jesli nie znajdziesz konkretnych lokali, zwroc pusta liste units i wyjasnij dlaczego w polu note.\n' +
-      '3. Dla kazdego lokalu podaj link do konkretnej oferty w polu source.\n' +
-      '4. Pola, ktorych nie znalazles, ustaw na null - nie zgaduj.\n\n' +
-      'Zwroc WYLACZNIE JSON:\n' +
-      '{\"official_url\":\"...\",\"note\":\"...\",\"investment\":{\"pros\":[\"...\"],\"cons\":[\"...\"],\"transit\":\"...\",\"ready\":\"...\",\"price_range\":\"...\"},' +
-      '\"units\":[{\"rooms\":3,\"area\":62.5,\"floor\":2,\"price\":890000,\"layout\":\"...\",\"balcony\":true,\"parking\":true,\"storage\":false,\"available_from\":\"...\",\"source\":\"https://...\",\"unclear\":[\"czego brakowalo na stronie\"]}]}';
+// Ostatni blad z API trzymamy globalnie - bez tego bledy znikaly po cichu
+// i uzytkownik widzial tylko "nie udalo sie odczytac strony".
+let LAST_AI_ERROR = null;
 
+async function callAnthropic(payload) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) { LAST_AI_ERROR = 'Brak ANTHROPIC_API_KEY'; return null; }
+  const controller = new AbortController();
+  const timer = setTimeout(function () { controller.abort(); }, 120000);
+  try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      signal: controller.signal,
       headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: prompt }]
-      })
+      body: JSON.stringify(payload)
     });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const text = (data.content || []).filter(function (c) { return c.type === 'text'; }).map(function (c) { return c.text || ''; }).join('');
-    const m = text.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
-    if (!m) return null;
-    const parsed = JSON.parse(m[0]);
+    const text = await resp.text();
+    if (!resp.ok) {
+      LAST_AI_ERROR = 'HTTP ' + resp.status + ': ' + text.slice(0, 400);
+      return null;
+    }
+    return JSON.parse(text);
+  } catch (e) {
+    LAST_AI_ERROR = e.name === 'AbortError' ? 'Przekroczono limit czasu (120 s)' : e.message;
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+app.get('/api/research/diag', async (req, res) => {
+  const hasKey = Boolean(process.env.ANTHROPIC_API_KEY);
+  if (!hasKey) return res.json({ hasKey: false, error: 'Brak ANTHROPIC_API_KEY w zmiennych srodowiskowych.' });
+  LAST_AI_ERROR = null;
+  const plain = await callAnthropic({ model: MODEL_NAME, max_tokens: 32, messages: [{ role: 'user', content: 'Odpowiedz jednym slowem: dziala' }] });
+  const plainErr = LAST_AI_ERROR;
+  LAST_AI_ERROR = null;
+  const withSearch = await callAnthropic({
+    model: MODEL_NAME, max_tokens: 256,
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 1 }],
+    messages: [{ role: 'user', content: 'Wyszukaj w internecie i podaj oficjalna strone dewelopera Murapol. Odpowiedz samym URL.' }]
+  });
+  res.json({
+    hasKey: true,
+    model: MODEL_NAME,
+    plainCall: plain ? 'OK' : ('BLAD: ' + plainErr),
+    webSearchCall: withSearch ? 'OK' : ('BLAD: ' + LAST_AI_ERROR)
+  });
+});
+
+async function aiFindUnits(inv, cr) {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+  LAST_AI_ERROR = null;
+
+  const prompt =
+    'Jestes asystentem agenta nieruchomosci. Znajdz AKTUALNIE DOSTEPNE mieszkania w JEDNEJ konkretnej inwestycji.\n\n' +
+    'INWESTYCJA: ' + inv.name + '\n' +
+    'DEWELOPER: ' + (inv.developer || 'nieznany') + '\n' +
+    'LOKALIZACJA: ' + (inv.location || 'nieznana') + '\n' +
+    'STRONA (z listy klienta): ' + (inv.url || 'brak - znajdz oficjalna strone tej inwestycji') + '\n\n' +
+    'PREFERENCJE KLIENTA: ' + prefsSummary(cr) + '\n\n' +
+    'ZASADY (krytyczne):\n' +
+    '1. Szukaj WYLACZNIE na oficjalnej stronie tego dewelopera/inwestycji. Nie uzywaj portali typu otodom, morizon, rynekpierwotny.\n' +
+    '2. NIE WYMYSLAJ mieszkan. Jesli nie znajdziesz konkretnych lokali, zwroc "units": [] i wyjasnij w "note", czego zabraklo.\n' +
+    '3. Dla kazdego lokalu podaj bezposredni link w polu "source".\n' +
+    '4. Pola, ktorych nie znalazles, ustaw na null - nie zgaduj.\n' +
+    '5. Zwroc maksymalnie 6 lokali najlepiej pasujacych do preferencji.\n\n' +
+    'Odpowiedz WYLACZNIE surowym JSON (bez markdown):\n' +
+    '{"official_url":"...","note":"...","investment":{"pros":["..."],"cons":["..."],"transit":"...","ready":"...","price_range":"..."},' +
+    '"units":[{"rooms":3,"area":62.5,"floor":2,"price":890000,"layout":"...","balcony":true,"parking":true,"storage":false,"available_from":"...","source":"https://...","unclear":["..."]}]}';
+
+  const data = await callAnthropic({
+    model: MODEL_NAME,
+    max_tokens: 4000,
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 }],
+    messages: [{ role: 'user', content: prompt }]
+  });
+  if (!data) return null;
+
+  try {
+    const text = (data.content || [])
+      .filter(function (c) { return c.type === 'text'; })
+      .map(function (c) { return c.text || ''; })
+      .join('');
+    const cleaned = text.replace(/```json/g, '').replace(/```/g, '');
+    // Bierzemy najwiekszy blok {...} - model czasem poprzedza JSON komentarzem.
+    const first = cleaned.indexOf('{');
+    const last = cleaned.lastIndexOf('}');
+    if (first === -1 || last <= first) {
+      LAST_AI_ERROR = 'Model nie zwrocil JSON. Poczatek odpowiedzi: ' + text.slice(0, 200);
+      return null;
+    }
+    const parsed = JSON.parse(cleaned.slice(first, last + 1));
     if (!Array.isArray(parsed.units)) parsed.units = [];
     return parsed;
   } catch (e) {
+    LAST_AI_ERROR = 'Blad parsowania odpowiedzi: ' + e.message;
     return null;
   }
 }
@@ -1139,11 +1197,17 @@ app.post('/api/research/run', async (req, res) => {
       entry.units_found = (ai.units || []).length;
     } else {
       const page = inv.url ? await fetchPageText(inv.url) : null;
-      entry.note = inv.url
-        ? (page
-            ? 'Nie udalo sie automatycznie odczytac listy dostepnych lokali ze strony (oferty ladowane skryptem). Sprawdz recznie: ' + inv.url
-            : 'Strona dewelopera nie odpowiedziala. Sprawdz recznie: ' + inv.url)
-        : 'PDF nie podaje strony inwestycji, a wyszukiwanie internetowe jest niedostepne (brak ANTHROPIC_API_KEY).';
+      // Rozrozniamy: awaria wyszukiwania vs. brak ofert na stronie.
+      if (aiAvailable && LAST_AI_ERROR) {
+        entry.note = 'Wyszukiwanie internetowe nie powiodlo sie: ' + LAST_AI_ERROR + (inv.url ? ' | Sprawdz recznie: ' + inv.url : '');
+        entry.ai_error = LAST_AI_ERROR;
+      } else {
+        entry.note = inv.url
+          ? (page
+              ? 'Nie udalo sie automatycznie odczytac listy dostepnych lokali ze strony (oferty ladowane skryptem). Sprawdz recznie: ' + inv.url
+              : 'Strona dewelopera nie odpowiedziala. Sprawdz recznie: ' + inv.url)
+          : 'PDF nie podaje strony inwestycji, a wyszukiwanie internetowe jest niedostepne.';
+      }
       entry.transit = inv.transit_min ? inv.transit_min + ' min' : null;
       entry.ready = inv.ready;
     }
@@ -1358,6 +1422,7 @@ try {
 db.defaults({ practiceScripts: [] }).write();
 
 const PRACTICE_TYPES = ['coldcall', 'meeting'];
+const MODEL_NAME = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
 
 const DEFAULT_COLDCALL_STAGES = [
   { key: 'open', title: 'Open call', script: '', priorities: '' },
