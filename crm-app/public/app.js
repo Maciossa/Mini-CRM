@@ -608,26 +608,33 @@ function openClientViewModal(id) {
   if (wonBtn) wonBtn.addEventListener('click', () => closeDeal(id, 'won'));
   if (lostBtn) lostBtn.addEventListener('click', () => closeDeal(id, 'lost'));
 
+  // Usuwac mozna kazdego klienta — i otwartego leada z tablicy Deals,
+  // i zamknieta transakcje. Komunikat dopasowujemy do sytuacji, zeby bylo
+  // jasne, co dokladnie znika.
   const deleteBtn = $('#client-view-delete-btn');
-  if (c.deal_status) {
-    deleteBtn.style.display = 'flex';
-    deleteBtn.onclick = async () => {
-      if (!confirm('Usunąć tę zamkniętą transakcję na stałe? Tej operacji nie można cofnąć.')) return;
-      try {
-        await api(`/clients/${id}`, { method: 'DELETE' });
-        await refreshAll();
-        renderClosedDeals();
-        renderBoard();
-        closeModal('modal-client-view');
-        toast('Zamknięta transakcja usunięta.');
-      } catch (err) {
-        toast(err.message);
-      }
-    };
-  } else {
-    deleteBtn.style.display = 'none';
-    deleteBtn.onclick = null;
-  }
+  const isClosed = Boolean(c.deal_status);
+  const who = (c.imie + ' ' + c.nazwisko).trim();
+  deleteBtn.style.display = 'flex';
+  deleteBtn.title = isClosed ? 'Usuń zamkniętą transakcję' : 'Usuń leada';
+  deleteBtn.onclick = async () => {
+    const question = isClosed
+      ? 'Usunąć zamkniętą transakcję „' + who + '” na stałe? Zniknie też z Closed Deals i ze statystyk. Tej operacji nie można cofnąć.'
+      : 'Usunąć leada „' + who + '” na stałe? Znikną też wszystkie jego akcje i spotkania. Tej operacji nie można cofnąć.';
+    if (!confirm(question)) return;
+    try {
+      await api('/clients/' + id, { method: 'DELETE' });
+      await refreshAll();
+      renderBoard();
+      renderClosedDeals();
+      renderContacts();
+      renderActivities();
+      renderCalendar();
+      closeModal('modal-client-view');
+      toast(isClosed ? 'Zamknięta transakcja usunięta.' : 'Lead usunięty.');
+    } catch (err) {
+      toast(err.message);
+    }
+  };
 
   openModal('modal-client-view');
 }
