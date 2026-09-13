@@ -401,6 +401,11 @@
           <div class="stat-value" id="stat-avg-days">—</div>
           <div class="stat-hint">Od leada do finalizacji</div>
         </div>
+        <div class="stat-card">
+          <div class="stat-label">Jakość obsługi</div>
+          <div class="stat-value" id="stat-service">—</div>
+          <div class="stat-hint" id="stat-service-hint">Średnia ocen klientów (1–10)</div>
+        </div>
       </div>
       <div class="chart-card">
         <h3 class="chart-title">Transakcje i skuteczność w miesiącach</h3>
@@ -454,6 +459,7 @@
       <div class="practice-tabs">
         <button class="practice-tab active" data-ptype="coldcall">Cold Call</button>
         <button class="practice-tab" data-ptype="meeting">Spotkanie</button>
+        <button class="practice-tab" data-ptype="service">Client Service</button>
       </div>
       <div class="sl-card">
         <div class="sl-head">
@@ -478,6 +484,47 @@
           <button class="btn btn-primary" id="btn-save-line">Zapisz etapy</button>
         </div>
       </div>
+      <div id="practice-service" style="display:none;">
+        <div class="cs-card">
+          <h3 class="chart-title">Standard obsługi klienta — 6 kroków</h3>
+          <p class="settings-hint">Opisz, jak krok po kroku prowadzisz klienta. To Twój punkt odniesienia przy ocenie obsługi.</p>
+          <div id="cs-steps"></div>
+          <button class="btn btn-primary" id="btn-save-service-steps">Zapisz standard obsługi</button>
+        </div>
+
+        <div class="cs-card">
+          <h3 class="chart-title">Ocena satysfakcji po prezentacji</h3>
+          <p class="settings-hint">Zaznacz, jak klient ocenil obsługę w skali 1–10. System podpowie, co zrobić dalej.</p>
+          <div class="cs-rate-row">
+            <div class="field">
+              <label for="cs-client">Klient</label>
+              <select id="cs-client"></select>
+            </div>
+            <div class="field">
+              <label for="cs-score">Ocena (1–10)</label>
+              <select id="cs-score">
+                <option value="">—</option>
+                <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+                <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+                <option value="10">10</option>
+              </select>
+            </div>
+          </div>
+          <div id="cs-hint"></div>
+          <div class="field">
+            <label for="cs-note">Notatka (opcjonalnie)</label>
+            <textarea id="cs-note" rows="2" placeholder="Co powiedział klient, co warto zapamiętać..."></textarea>
+          </div>
+          <button class="btn btn-primary" id="btn-save-rating">Zapisz ocenę</button>
+        </div>
+
+        <div class="cs-card">
+          <div class="cs-summary" id="cs-summary"></div>
+          <div id="cs-list"></div>
+        </div>
+      </div>
+
       <div id="practice-stages"></div>
       <div id="practice-review"></div>
     </section>
