@@ -92,6 +92,7 @@ db.defaults({
   passwordResets: [],
   profiles: [],
   researchReports: [],
+  serviceRatings: [],
   meta: {}
 }).write();
 
@@ -126,6 +127,7 @@ function publicProfile(p) {
     prowizja_agenta: p.prowizja_agenta || 50,
     stages: (Array.isArray(p.stages) && p.stages.length === STAGES.length) ? p.stages : STAGES,
     stageDescriptions: (Array.isArray(p.stageDescriptions) && p.stageDescriptions.length === STAGES.length) ? p.stageDescriptions : STAGES.map(function () { return ''; }),
+    serviceSteps: (Array.isArray(p.serviceSteps) && p.serviceSteps.length === 6) ? p.serviceSteps : ['', '', '', '', '', ''],
     theme: p.theme === 'dark' ? 'dark' : 'light'
   };
 }
@@ -402,7 +404,7 @@ app.get('/api/profiles/me', requireProfile, (req, res) => {
 
 const ALLOWED_SPLITS = [45, 50, 55, 60];
 app.put('/api/profiles/me/settings', requireProfile, (req, res) => {
-  const { prowizja_agenta, stages, stageDescriptions, theme } = req.body;
+  const { prowizja_agenta, stages, stageDescriptions, serviceSteps, theme } = req.body;
   const updates = {};
   if (prowizja_agenta !== undefined) {
     // Gotowe opcje to tylko skrot - agent moze wpisac dowolna wartosc.
@@ -440,6 +442,13 @@ app.put('/api/profiles/me/settings', requireProfile, (req, res) => {
       return res.status(400).json({ error: `Lista opisów musi zawierać dokładnie ${STAGES.length} pozycji.` });
     }
     updates.stageDescriptions = stageDescriptions.map(d => String(d || '').trim().slice(0, 400));
+  }
+
+  if (serviceSteps !== undefined) {
+    if (!Array.isArray(serviceSteps) || serviceSteps.length !== 6) {
+      return res.status(400).json({ error: 'Standard obsługi musi zawierać dokładnie 6 kroków.' });
+    }
+    updates.serviceSteps = serviceSteps.map(v => String(v || '').trim().slice(0, 1500));
   }
 
   if (theme !== undefined) {
@@ -1402,6 +1411,103 @@ app.get('/api/research/reports/:id', (req, res) => {
   const r = db.get('researchReports').find({ id: req.params.id, profile_id: req.profileId }).value();
   if (!r) return res.status(404).json({ error: 'Nie znaleziono raportu.' });
   res.json(r);
+});
+
+// ===========================================================================
+// CLIENT SERVICE — oceny satysfakcji klienta po prezentacji
+// Skala 1-10 w logice NPS: 9-10 promotor, 7-8 neutralny, 1-6 sygnal alarmowy.
+// ===========================================================================
+app.use('/api/service', requireProfile);
+
+function ratingCategory(score) {
+  if (score >= 9) {
+    return {
+      key: 'promoter',
+      label: 'Potencjalny promotor',
+      action: 'Wyślij SMS z podziękowaniem oraz linkiem do zostawienia opinii w Google / Social Media i prośbą o polecenie.'
+    };
+  }
+  if (score >= 7) {
+    return {
+      key: 'neutral',
+      label: 'Neutralny',
+      action: 'Przy kolejnym kontakcie dopytaj: „Co konkretnie możemy dopracować, żeby na koniec dał nam Pan 10/10?”'
+    };
+  }
+  return {
+    key: 'detractor',
+    label: 'Zła obsługa',
+    action: 'Wyślij SMS z pytaniem, co jest do poprawy i co konkretnie się nie podobało.'
+  };
+}
+
+app.get('/api/service/ratings', (req, res) => {
+  const clients = db.get('clients').filter({ profile_id: req.profileId }).value();
+  const list = db.get('serviceRatings').filter({ profile_id: req.profileId }).value()
+    .map(function (r) {
+      const c = clients.find(function (x) { return x.id === r.client_id; });
+      const cat = ratingCategory(r.score);
+      return {
+        id: r.id,
+        client_id: r.client_id,
+        client_name: c ? (c.imie + ' ' + c.nazwisko) : 'Klient usunięty',
+        score: r.score,
+        note: r.note || '',
+        created_at: r.created_at,
+        category: cat.key,
+        category_label: cat.label,
+        action: cat.action
+      };
+    })
+    .sort(function (a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+
+  const scores = list.map(function (r) { return r.score; });
+  const avg = scores.length ? scores.reduce(function (a, b) { return a + b; }, 0) / scores.length : null;
+  res.json({
+    ratings: list,
+    count: list.length,
+    average: avg === null ? null : Math.round(avg * 10) / 10,
+    promoters: list.filter(function (r) { return r.category === 'promoter'; }).length,
+    neutrals: list.filter(function (r) { return r.category === 'neutral'; }).length,
+    detractors: list.filter(function (r) { return r.category === 'detractor'; }).length
+  });
+});
+
+app.post('/api/service/ratings', (req, res) => {
+  const { client_id, score, note } = req.body;
+  const val = Number(score);
+  if (!Number.isInteger(val) || val < 1 || val > 10) {
+    return res.status(400).json({ error: 'Ocena musi być liczbą całkowitą od 1 do 10.' });
+  }
+  const client = db.get('clients').find({ id: client_id, profile_id: req.profileId }).value();
+  if (!client) return res.status(404).json({ error: 'Nie znaleziono klienta.' });
+
+  const rec = {
+    id: uuidv4(),
+    profile_id: req.profileId,
+    client_id: client.id,
+    score: val,
+    note: String(note || '').trim().slice(0, 800),
+    created_at: now()
+  };
+  db.get('serviceRatings').push(rec).write();
+
+  const cat = ratingCategory(val);
+  res.status(201).json({
+    id: rec.id,
+    client_name: client.imie + ' ' + client.nazwisko,
+    score: val,
+    note: rec.note,
+    created_at: rec.created_at,
+    category: cat.key,
+    category_label: cat.label,
+    action: cat.action
+  });
+});
+
+app.delete('/api/service/ratings/:id', (req, res) => {
+  db.get('serviceRatings').remove({ id: req.params.id, profile_id: req.profileId }).write();
+  res.status(204).end();
 });
 
 app.get('*', (req, res) => {
