@@ -2381,3 +2381,184 @@ $('#form-reset').addEventListener('submit', async e => {
   // Ekran resetu musi wygrac z automatycznym logowaniem z ciasteczka.
   setTimeout(() => showAuthScreen('account-reset'), 60);
 })();
+
+
+// ===========================================================================
+// CLIENT SERVICE — standard obsługi i oceny satysfakcji
+// ===========================================================================
+let serviceData = null;
+
+const CS_STEP_LABELS = [
+  'Krok 1 — pierwszy kontakt',
+  'Krok 2 — badanie potrzeb',
+  'Krok 3 — prezentacja oferty',
+  'Krok 4 — po prezentacji',
+  'Krok 5 — domknięcie',
+  'Krok 6 — po sprzedaży'
+];
+
+function renderServiceSteps() {
+  const box = $('#cs-steps');
+  if (!box) return;
+  const steps = (currentProfile && Array.isArray(currentProfile.serviceSteps) && currentProfile.serviceSteps.length === 6)
+    ? currentProfile.serviceSteps
+    : ['', '', '', '', '', ''];
+  box.innerHTML = steps.map(function (v, i) {
+    return '<div class="field"><label for="cs-step-' + i + '">' + CS_STEP_LABELS[i] + '</label>' +
+      '<textarea id="cs-step-' + i + '" class="cs-step-input" rows="3" placeholder="Opisz, co robisz na tym etapie...">' + escapeHtml(v) + '</textarea></div>';
+  }).join('');
+}
+
+$('#btn-save-service-steps').addEventListener('click', async () => {
+  const steps = $$('.cs-step-input').map(t => t.value.trim());
+  try {
+    const data = await api('/profiles/me/settings', { method: 'PUT', body: JSON.stringify({ serviceSteps: steps }) });
+    currentProfile = data;
+    toast('Standard obsługi zapisany.');
+  } catch (err) { toast(err.message); }
+});
+
+// Podpowiedz pojawia sie od razu po wyborze oceny - agent widzi, co zrobic,
+// zanim jeszcze zapisze wpis.
+function csCategory(score) {
+  if (score >= 9) return { key: 'promoter', label: 'Potencjalny promotor', action: 'Wyślij SMS z podziękowaniem oraz linkiem do zostawienia opinii w Google / Social Media i prośbą o polecenie.' };
+  if (score >= 7) return { key: 'neutral', label: 'Neutralny', action: 'Przy kolejnym kontakcie dopytaj: „Co konkretnie możemy dopracować, żeby na koniec dał nam Pan 10/10?”' };
+  return { key: 'detractor', label: 'Zła obsługa', action: 'Wyślij SMS z pytaniem, co jest do poprawy i co konkretnie się nie podobało.' };
+}
+
+function renderCsHint() {
+  const box = $('#cs-hint');
+  const raw = $('#cs-score').value;
+  if (!box) return;
+  if (!raw) { box.innerHTML = ''; return; }
+  const cat = csCategory(Number(raw));
+  box.innerHTML = '<div class="cs-alert cs-' + cat.key + '">' +
+    '<div class="cs-alert-title">' + escapeHtml(cat.label) + '</div>' +
+    '<div class="cs-alert-action">' + escapeHtml(cat.action) + '</div></div>';
+}
+
+$('#cs-score').addEventListener('change', renderCsHint);
+
+$('#btn-save-rating').addEventListener('click', async () => {
+  const clientId = $('#cs-client').value;
+  const score = Number($('#cs-score').value);
+  if (!clientId) { toast('Wybierz klienta.'); return; }
+  if (!score) { toast('Zaznacz ocenę od 1 do 10.'); return; }
+  try {
+    await api('/service/ratings', {
+      method: 'POST',
+      body: JSON.stringify({ client_id: clientId, score: score, note: $('#cs-note').value.trim() })
+    });
+    $('#cs-note').value = '';
+    $('#cs-score').value = '';
+    renderCsHint();
+    await loadServiceRatings();
+    toast('Ocena zapisana.');
+  } catch (err) { toast(err.message); }
+});
+
+async function loadServiceRatings() {
+  try {
+    serviceData = await api('/service/ratings');
+  } catch (err) {
+    serviceData = null;
+    return;
+  }
+  renderServiceSummary();
+  renderStatServiceCard();
+}
+
+function renderServiceSummary() {
+  const sum = $('#cs-summary');
+  const list = $('#cs-list');
+  if (!sum || !serviceData) return;
+
+  sum.innerHTML = serviceData.count
+    ? '<div class="cs-stats">' +
+      '<div><strong>' + serviceData.average.toFixed(1) + '</strong><span>średnia ocena</span></div>' +
+      '<div><strong>' + serviceData.promoters + '</strong><span>promotorzy</span></div>' +
+      '<div><strong>' + serviceData.neutrals + '</strong><span>neutralni</span></div>' +
+      '<div><strong>' + serviceData.detractors + '</strong><span>zła obsługa</span></div>' +
+      '</div>'
+    : '<p class="settings-hint">Brak ocen. Pierwszą dodasz formularzem powyżej.</p>';
+
+  list.innerHTML = serviceData.ratings.map(function (r) {
+    return '<div class="cs-row cs-' + r.category + '">' +
+      '<span class="cs-score-badge cs-' + r.category + '">' + r.score + '</span>' +
+      '<div class="cs-row-main">' +
+      '<div class="cs-row-title">' + escapeHtml(r.client_name) + ' — ' + escapeHtml(r.category_label) + '</div>' +
+      '<div class="cs-row-meta">' + new Date(r.created_at).toLocaleDateString('pl-PL') +
+      (r.note ? ' · ' + escapeHtml(r.note) : '') + '</div>' +
+      '<div class="cs-row-action">' + escapeHtml(r.action) + '</div>' +
+      '</div>' +
+      '<button class="btn-small cs-del" data-id="' + r.id + '">Usuń</button>' +
+      '</div>';
+  }).join('');
+
+  $$('.cs-del').forEach(function (b) {
+    b.addEventListener('click', async () => {
+      if (!confirm('Usunąć tę ocenę?')) return;
+      try {
+        await api('/service/ratings/' + b.dataset.id, { method: 'DELETE' });
+        await loadServiceRatings();
+        toast('Ocena usunięta.');
+      } catch (err) { toast(err.message); }
+    });
+  });
+}
+
+// Karta "Jakość obsługi" w Statistics
+function renderStatServiceCard() {
+  const el = $('#stat-service');
+  const hint = $('#stat-service-hint');
+  if (!el) return;
+  if (!serviceData || !serviceData.count) {
+    el.textContent = '—';
+    if (hint) hint.textContent = 'Brak ocen — dodaj je w Practice → Client Service';
+    return;
+  }
+  el.textContent = serviceData.average.toFixed(1) + ' / 10';
+  if (hint) hint.textContent = 'Średnia z ' + serviceData.count + ' ocen · ' + serviceData.promoters + ' promotorów, ' + serviceData.detractors + ' do poprawy';
+}
+
+// Trzecia podzakladka ma wlasny widok - chowamy linie i etapy skryptu,
+// bo Client Service nie jest rozmowa prowadzona po Straight Line.
+(function hookServiceTab() {
+  const origRender = renderPractice;
+  renderPractice = function () {
+    const isService = practiceType === 'service';
+    const slCard = document.querySelector('.sl-card');
+    const stages = $('#practice-stages');
+    const review = $('#practice-review');
+    const svc = $('#practice-service');
+    const saveBtn = $('#btn-save-practice');
+    const aiBtn = $('#btn-improve-script');
+
+    if (slCard) slCard.style.display = isService ? 'none' : 'block';
+    if (stages) stages.style.display = isService ? 'none' : 'block';
+    if (review) review.style.display = isService ? 'none' : 'block';
+    if (svc) svc.style.display = isService ? 'block' : 'none';
+    if (saveBtn) saveBtn.style.display = isService ? 'none' : 'inline-block';
+    if (aiBtn) aiBtn.style.display = isService ? 'none' : 'inline-block';
+
+    if (isService) {
+      renderServiceSteps();
+      $('#cs-client').innerHTML = clients.length
+        ? clients.map(function (c) { return '<option value="' + c.id + '">' + escapeHtml(c.imie) + ' ' + escapeHtml(c.nazwisko) + '</option>'; }).join('')
+        : '<option value="">Brak klientów — dodaj klienta w Deals</option>';
+      loadServiceRatings();
+      return;
+    }
+    origRender.apply(this, arguments);
+  };
+})();
+
+// Statistics ma pokazac srednia nawet bez wchodzenia w Practice.
+(function hookStatsService() {
+  const orig = renderStatisticsView;
+  renderStatisticsView = function () {
+    orig.apply(this, arguments);
+    if (serviceData) renderStatServiceCard();
+    else loadServiceRatings();
+  };
+})();
